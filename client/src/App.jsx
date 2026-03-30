@@ -191,13 +191,20 @@ function LeagueTable({ students }) {
             className="grid grid-cols-[40px_1fr_50px_50px_50px_60px_60px] items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3"
           >
             <div className="font-display text-2xl font-bold text-teal-300">{index + 1}</div>
-            <div>
-              <div className="font-display text-xl uppercase tracking-[0.1em] text-white">
-                {student.teamName}
+            <div className="flex items-center gap-3">
+              <JerseyPreview 
+                color={JERSEY_COLORS.find(c => c.id === (student.jerseyColor || "bleu"))} 
+                style={student.jerseyStyle || "solid"}
+                size="small"
+              />
+              <div>
+                <div className="font-display text-xl uppercase tracking-[0.1em] text-white">
+                  {student.teamName}
+                </div>
+                {student.starPlayers.length > 0 && (
+                  <div className="text-xs text-gold">{student.starPlayers.join(", ")}</div>
+                )}
               </div>
-              {student.starPlayers.length > 0 && (
-                <div className="text-xs text-gold">{student.starPlayers.join(", ")}</div>
-              )}
             </div>
             <div className="text-center font-display text-lg text-slate-300">
               {student.leagueRecord.played}
@@ -651,9 +658,12 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
     });
   };
 
+  const [customizeMessage, setCustomizeMessage] = useState("");
+  
   const handleCustomize = () => {
     console.log("Saving customization:", selectedColor, selectedStyle);
-    onCustomizeTeam(selectedColor, selectedStyle);
+    setCustomizeMessage("Sauvegarde en cours...");
+    onCustomizeTeam(selectedColor, selectedStyle, setCustomizeMessage);
   };
 
   if (!student) {
@@ -927,14 +937,21 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
                 const opponent = isHome ? away : home;
                 const showScores = room.matchState.showScores;
                 
+                const opponentStudent = room.students.find(s => s.teamName === opponent);
+                
                 return (
                   <div key={i} className="rounded-3xl border border-gold/30 bg-slate-950/90 p-6 text-center">
                     <div className="mb-4 font-display text-xl uppercase tracking-[0.15em] text-slate-400">
                       Votre Match
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className={`font-display text-3xl uppercase tracking-[0.1em] ${isHome ? 'text-gold' : 'text-white'}`}>
+                      <div className="flex-1 flex flex-col items-center">
+                        <JerseyPreview 
+                          color={JERSEY_COLORS.find(c => c.id === (student.jerseyColor || "bleu"))} 
+                          style={student.jerseyStyle || "solid"}
+                          size="small"
+                        />
+                        <div className={`mt-2 font-display text-xl uppercase tracking-[0.1em] ${isHome ? 'text-gold' : 'text-white'}`}>
                           {student.teamName}
                         </div>
                       </div>
@@ -945,8 +962,13 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
                           "? - ?"
                         )}
                       </div>
-                      <div className="flex-1">
-                        <div className={`font-display text-3xl uppercase tracking-[0.1em] ${!isHome ? 'text-gold' : 'text-white'}`}>
+                      <div className="flex-1 flex flex-col items-center">
+                        <JerseyPreview 
+                          color={JERSEY_COLORS.find(c => c.id === (opponentStudent?.jerseyColor || "bleu"))} 
+                          style={opponentStudent?.jerseyStyle || "solid"}
+                          size="small"
+                        />
+                        <div className={`mt-2 font-display text-xl uppercase tracking-[0.1em] ${!isHome ? 'text-gold' : 'text-white'}`}>
                           {opponent}
                         </div>
                       </div>
@@ -1108,6 +1130,9 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
             >
               Sauvegarder Design
             </button>
+            {customizeMessage && (
+              <p className="mt-3 text-center text-sm text-teal-300">{customizeMessage}</p>
+            )}
           </div>
         </Panel>
       )}
@@ -1452,14 +1477,16 @@ function App() {
     });
   };
 
-  const handleCustomizeTeam = (jerseyColor, jerseyStyle) => {
+  const handleCustomizeTeam = (jerseyColor, jerseyStyle, setMessage) => {
     console.log("Emitting customize-team:", room.code, jerseyColor, jerseyStyle);
     socket.emit("student:customize-team", { code: room.code, jerseyColor, jerseyStyle }, (response) => {
       console.log("Customize response:", response);
       if (response?.ok) {
         setStudent(response.student);
+        setMessage?.("Design sauvegarde!");
+        setTimeout(() => setMessage?.(""), 2000);
       } else {
-        alert(response?.error || "Erreur de personnalisation");
+        setMessage?.(response?.error || "Erreur");
       }
     });
   };

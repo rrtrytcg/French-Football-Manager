@@ -271,6 +271,8 @@ export function addStudent(code, socketId, teamName) {
     leagueRecord: createLeagueRecord(),
     starPlayers: [],
     activeBoosts: {},
+    jerseyColor: "bleu",
+    jerseyStyle: "solid",
   };
 
   room.students.set(socketId, student);
