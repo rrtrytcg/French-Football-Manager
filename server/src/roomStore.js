@@ -40,6 +40,7 @@ function serializeStudent(student) {
     stats: student.stats,
     leagueRecord: student.leagueRecord,
     starPlayers: student.starPlayers,
+    activeBoosts: student.activeBoosts || {},
   };
 }
 
@@ -170,6 +171,7 @@ function createDummyTeam() {
     askedCardIds: new Set(),
     leagueRecord: createLeagueRecord(),
     starPlayers: [],
+    activeBoosts: {},
     isDummy: true,
   };
 }
@@ -263,6 +265,7 @@ export function addStudent(code, socketId, teamName) {
     askedCardIds: new Set(),
     leagueRecord: createLeagueRecord(),
     starPlayers: [],
+    activeBoosts: {},
   };
 
   room.students.set(socketId, student);

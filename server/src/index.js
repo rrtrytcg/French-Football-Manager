@@ -179,7 +179,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("student:buy-mystery-box", ({ code }, callback) => {
+    console.log("Buy mystery box requested:", code, "socket:", socket.id);
     const result = buyMysteryBox(code, socket.id);
+    console.log("Buy mystery box result:", result.error || "success");
     if (result.error) {
       callback?.({ ok: false, error: result.error });
       return;
