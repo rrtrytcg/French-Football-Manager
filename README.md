@@ -37,14 +37,42 @@ npm run dev
 
 ### Production Deployment
 
-#### Railway (Recommended)
+#### Render (Free Tier - Recommended for Classrooms)
 
-1. Fork this repository
-2. Go to [Railway](https://railway.app) and create a new project
+Render offers a **free tier** perfect for classroom use. The only limitation is that the server "sleeps" after 15 minutes of inactivity and takes 30-60 seconds to wake up when someone visits.
+
+**Setup:**
+1. Go to [render.com](https://render.com) and create a free account
+2. Click "New" → "Web Service"
 3. Connect your GitHub repository
-4. Build Command: `npm run install:all && npm run build`
-5. Start Command: `npm run start`
-6. Get your public URL and share with students!
+4. Configure:
+   - **Name**: `french-football-manager`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm run install:all && npm run build`
+   - **Start Command**: `npm run start`
+   - **Plan**: Free
+5. Click "Create Web Service"
+6. Wait for deployment (2-3 minutes)
+7. Get your public URL (e.g., `https://french-football-manager.onrender.com`)
+8. Share with students!
+
+**Note:** If the URL shows "Loading..." for a minute, the server is just waking up from sleep. This only happens after periods of inactivity.
+
+#### Railway (Paid - For 24/7 Uptime)
+
+Railway provides **always-on** hosting but requires payment after the free trial. Use this if you need the game available instantly at any time without sleep delays.
+
+**Setup:**
+1. Go to [railway.app](https://railway.app) and create an account
+2. Create a new project → "Deploy from GitHub repo"
+3. Connect your repository
+4. Configure:
+   - **Build Command**: `npm run install:all && npm run build`
+   - **Start Command**: `npm run start`
+5. Add a payment method (required for continuous uptime)
+6. Deploy and get your URL
+
+**Cost:** ~$5/month for basic uptime (pricing varies by usage)
 
 #### Manual Deployment
 
@@ -106,7 +134,7 @@ Spend EUR 100 to open a mystery box and receive:
 - **Frontend**: React, Tailwind CSS, Vite
 - **Backend**: Node.js, Express
 - **Real-time**: Socket.io
-- **Deployment**: Railway/Render ready
+- **Deployment**: Render (free) or Railway (paid 24/7)
 
 ## 📁 Project Structure
 
