@@ -1,11 +1,14 @@
 import cors from "cors";
 import express from "express";
 import http from "http";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { Server } from "socket.io";
 import {
   addStudent,
   answerQuestion,
   buyUpgrade,
+  buyPlayer,
   createRoom,
   getStudentState,
   importQuizletSet,
@@ -14,7 +17,13 @@ import {
   removeStudentBySocket,
   serializeRoom,
   serializeStudentWithCosts,
+  startSession,
+  stopSession,
+  startMatch,
 } from "./roomStore.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -23,6 +32,15 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+const isProduction = process.env.NODE_ENV === "production";
+if (isProduction) {
+  const clientDist = join(__dirname, "..", "..", "client", "dist");
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(join(clientDist, "index.html"));
+  });
+}
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -37,6 +55,7 @@ io.on("connection", (socket) => {
   socket.on("teacher:create-room", (_, callback) => {
     const room = createRoom(socket.id);
     socket.join(room.code);
+    emitRoomState(room);
     callback?.({ ok: true, room: serializeRoom(room) });
   });
 
@@ -59,6 +78,35 @@ io.on("connection", (socket) => {
     io.to(studentSocketId).emit("student:kicked");
     io.sockets.sockets.get(studentSocketId)?.leave(code);
     emitRoomState(result.room);
+    callback?.({ ok: true });
+  });
+
+  socket.on("teacher:start-session", ({ code, duration }, callback) => {
+    const result = startSession(code, duration);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({ ok: true });
+  });
+
+  socket.on("teacher:stop-session", ({ code }, callback) => {
+    const result = stopSession(code);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({ ok: true });
+  });
+
+  socket.on("teacher:start-match", ({ code }, callback) => {
+    const result = startMatch(code, emitRoomState);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
     callback?.({ ok: true });
   });
 
@@ -109,6 +157,20 @@ io.on("connection", (socket) => {
     callback?.({
       ok: true,
       cost: result.cost,
+      student: serializeStudentWithCosts(result.student),
+    });
+  });
+
+  socket.on("student:buy-player", ({ code, playerId }, callback) => {
+    const result = buyPlayer(code, socket.id, playerId);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({
+      ok: true,
+      player: result.player,
       student: serializeStudentWithCosts(result.student),
     });
   });

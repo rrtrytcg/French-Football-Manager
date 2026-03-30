@@ -3,8 +3,15 @@ import {
   BASE_UPGRADE_COST,
   BONUS_DURATION_MS,
   BONUS_STREAK,
+  COMMENTARY_LINES,
   DEFAULT_STATS,
+  MATCH_INTERVAL_MS,
+  MATCH_SIM_DURATION_MS,
+  POINTS_DRAW,
+  POINTS_LOSS,
+  POINTS_WIN,
   STATS,
+  STAR_PLAYERS,
 } from "./constants.js";
 import { buildQuestion, parseQuizletText } from "./quiz.js";
 
@@ -27,6 +34,8 @@ function serializeStudent(student) {
     streak: student.streak,
     bonusActiveUntil: student.bonusActiveUntil,
     stats: student.stats,
+    leagueRecord: student.leagueRecord,
+    starPlayers: student.starPlayers,
   };
 }
 
@@ -45,9 +54,136 @@ function createQuestionForStudent(room, student) {
 
   return {
     id: question.id,
+    cardId: question.cardId,
     prompt: question.prompt,
     options: question.options.map(({ id, label }) => ({ id, label })),
   };
+}
+
+function createLeagueRecord() {
+  return {
+    played: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    points: 0,
+  };
+}
+
+function calculateTeamStrength(stats) {
+  return (
+    stats.attaque * 2 +
+    stats.defense * 1.5 +
+    stats.passes * 1 +
+    stats.gardien * 2
+  );
+}
+
+function simulateMatch(homeTeam, awayTeam) {
+  const homeStrength = calculateTeamStrength(homeTeam.stats);
+  const awayStrength = calculateTeamStrength(awayTeam.stats);
+
+  const totalStrength = homeStrength + awayStrength;
+  const homeRoll = Math.random() * totalStrength;
+  const awayRoll = totalStrength - homeRoll;
+
+  const homeGoals = Math.floor(homeRoll / (awayStrength || 1) * 3);
+  const awayGoals = Math.floor(awayRoll / (homeStrength || 1) * 3);
+
+  const commentary = [];
+  const homeName = homeTeam.teamName;
+  const awayName = awayTeam.teamName;
+
+  const phases = [
+    { type: "attack", team: homeName },
+    { type: "save", team: awayName },
+    { type: "attack", team: awayName },
+    { type: "goal", team: homeGoals > 0 ? homeName : null },
+    { type: "miss", team: homeGoals === 0 ? homeName : null },
+    { type: "attack", team: homeName },
+    { type: "goal", team: awayGoals > 0 ? awayName : null },
+    { type: "miss", team: awayGoals === 0 ? awayName : null },
+  ];
+
+  for (const phase of phases) {
+    if (phase.type === "goal" && !phase.team) continue;
+    if (phase.type === "miss" && !phase.team) continue;
+
+    const lines = COMMENTARY_LINES[phase.type];
+    let line = lines[Math.floor(Math.random() * lines.length)];
+    line = line.replace("{team}", phase.team || (phase.type === "goal" ? homeName : awayName));
+    commentary.push(line);
+  }
+
+  let result;
+  if (homeGoals > awayGoals) {
+    result = "win";
+    homeTeam.leagueRecord.wins += 1;
+    homeTeam.leagueRecord.points += POINTS_WIN;
+    awayTeam.leagueRecord.losses += 1;
+  } else if (homeGoals < awayGoals) {
+    result = "loss";
+    homeTeam.leagueRecord.losses += 1;
+    awayTeam.leagueRecord.wins += 1;
+    awayTeam.leagueRecord.points += POINTS_WIN;
+  } else {
+    result = "draw";
+    homeTeam.leagueRecord.draws += 1;
+    homeTeam.leagueRecord.points += POINTS_DRAW;
+    awayTeam.leagueRecord.draws += 1;
+    awayTeam.leagueRecord.points += POINTS_DRAW;
+  }
+
+  homeTeam.leagueRecord.played += 1;
+  homeTeam.leagueRecord.goalsFor += homeGoals;
+  homeTeam.leagueRecord.goalsAgainst += awayGoals;
+  awayTeam.leagueRecord.played += 1;
+  awayTeam.leagueRecord.goalsFor += awayGoals;
+  awayTeam.leagueRecord.goalsAgainst += homeGoals;
+
+  return {
+    homeTeam: homeTeam.teamName,
+    awayTeam: awayTeam.teamName,
+    homeGoals,
+    awayGoals,
+    result,
+    commentary,
+  };
+}
+
+function createDummyTeam() {
+  return {
+    id: `dummy-${Date.now()}`,
+    socketId: null,
+    teamName: "England",
+    euros: 0,
+    streak: 0,
+    bonusActiveUntil: null,
+    stats: { ...DEFAULT_STATS },
+    currentQuestion: null,
+    askedCardIds: new Set(),
+    leagueRecord: createLeagueRecord(),
+    starPlayers: [],
+    isDummy: true,
+  };
+}
+
+function pairStudents(students) {
+  const shuffled = [...students].sort(() => Math.random() - 0.5);
+  const pairings = [];
+
+  // If odd number, add dummy team
+  if (shuffled.length % 2 === 1) {
+    shuffled.push(createDummyTeam());
+  }
+
+  for (let i = 0; i < shuffled.length; i += 2) {
+    pairings.push([shuffled[i], shuffled[i + 1]]);
+  }
+
+  return pairings;
 }
 
 export function createRoom(teacherSocketId) {
@@ -58,6 +194,11 @@ export function createRoom(teacherSocketId) {
     status: "lobby",
     cards: [],
     students: new Map(),
+    transferMarket: STAR_PLAYERS.map((p) => ({ ...p, purchasedBy: null })),
+    matchState: null,
+    matchInterval: null,
+    sessionDuration: 30,
+    sessionStartTime: null,
   };
   rooms.set(code, room);
   return room;
@@ -116,6 +257,8 @@ export function addStudent(code, socketId, teamName) {
     stats: { ...DEFAULT_STATS },
     currentQuestion: null,
     askedCardIds: new Set(),
+    leagueRecord: createLeagueRecord(),
+    starPlayers: [],
   };
 
   room.students.set(socketId, student);
@@ -150,6 +293,9 @@ export function nextQuestion(code, socketId) {
   if (room.cards.length < 4) {
     return { error: "Teacher must import at least 4 cards first." };
   }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match in progress. Wait for the next round." };
+  }
 
   const question = createQuestionForStudent(room, student);
   if (!question) {
@@ -164,6 +310,9 @@ export function answerQuestion(code, socketId, optionId) {
   const student = room?.students.get(socketId);
   if (!room || !student || !student.currentQuestion) {
     return { error: "No active question." };
+  }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match in progress. Wait for the next round." };
   }
 
   const currentQuestion = student.currentQuestion;
@@ -210,6 +359,9 @@ export function buyUpgrade(code, socketId, stat) {
   if (!STATS.includes(stat)) {
     return { error: "Unknown stat." };
   }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match in progress. Upgrades locked." };
+  }
 
   const currentLevel = student.stats[stat];
   const cost = getUpgradeCost(currentLevel);
@@ -223,6 +375,38 @@ export function buyUpgrade(code, socketId, stat) {
   return { cost, student, room };
 }
 
+export function buyPlayer(code, socketId, playerId) {
+  const room = getRoom(code);
+  const student = room?.students.get(socketId);
+  if (!room || !student) {
+    return { error: "Student not found." };
+  }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match in progress. Transfers locked." };
+  }
+
+  const player = room.transferMarket.find((p) => p.id === playerId);
+  if (!player) {
+    return { error: "Player not found." };
+  }
+  if (player.purchasedBy) {
+    return { error: "Player already purchased." };
+  }
+  if (student.euros < player.cost) {
+    return { error: "Not enough Euros." };
+  }
+
+  student.euros -= player.cost;
+  player.purchasedBy = student.id;
+
+  for (const [stat, boost] of Object.entries(player.statBoosts)) {
+    student.stats[stat] = (student.stats[stat] || 1) + boost;
+  }
+  student.starPlayers.push(player.name);
+
+  return { player, student, room };
+}
+
 export function kickStudent(code, studentSocketId) {
   const room = getRoom(code);
   if (!room) {
@@ -231,6 +415,96 @@ export function kickStudent(code, studentSocketId) {
 
   room.students.delete(studentSocketId);
   return { room };
+}
+
+export function startSession(code, duration) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+
+  room.sessionDuration = duration || 30;
+  room.sessionStartTime = Date.now();
+  room.status = "playing";
+
+  return { room };
+}
+
+export function startMatch(code, emitState) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+  if (room.status !== "playing") {
+    return { error: "Session not started." };
+  }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match already in progress." };
+  }
+
+  runMatchCycle(room, emitState);
+  return { room };
+}
+
+export function stopSession(code) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+
+  if (room.matchInterval) {
+    clearInterval(room.matchInterval);
+    room.matchInterval = null;
+  }
+  room.status = "ready";
+  room.matchState = { phase: "idle", pairings: [], results: [], commentary: [] };
+
+  return { room };
+}
+
+function runMatchCycle(room, emitState) {
+  const students = Array.from(room.students.values()).filter(s => !s.isDummy);
+  if (students.length < 1) {
+    return;
+  }
+
+  room.matchState = { phase: "simulating", pairings: [], results: [], commentary: [], showScores: false };
+
+  const pairings = pairStudents(students);
+  room.matchState.pairings = pairings.map(([home, away]) => [home.teamName, away.teamName]);
+
+  const results = [];
+  const commentary = [];
+
+  for (const [home, away] of pairings) {
+    const result = simulateMatch(home, away);
+    results.push(result);
+    commentary.push(...result.commentary);
+  }
+
+  room.matchState.results = results.map((r) => ({
+    homeTeam: r.homeTeam,
+    awayTeam: r.awayTeam,
+    homeGoals: r.homeGoals,
+    awayGoals: r.awayGoals,
+  }));
+  room.matchState.commentary = commentary;
+
+  // Emit initial state with match starting
+  if (emitState) emitState(room);
+
+  // After match duration, show scores and emit final state
+  setTimeout(() => {
+    room.matchState.showScores = true;
+    if (emitState) emitState(room);
+    
+    // Then clear after showing scores for a bit
+    setTimeout(() => {
+      room.matchState = { phase: "idle", pairings: [], results: [], commentary: [], showScores: false };
+      room.status = "playing";
+      if (emitState) emitState(room);
+    }, 5000);
+  }, MATCH_SIM_DURATION_MS);
 }
 
 export function getUpgradePreview(student) {
@@ -243,10 +517,16 @@ export function serializeRoom(room) {
     teacherSocketId: room.teacherSocketId,
     status: room.status,
     cardsLoaded: room.cards.length,
-    students: Array.from(room.students.values()).map((student) => ({
-      ...serializeStudent(student),
-      upgradeCosts: getUpgradePreview(student),
-    })),
+    sessionDuration: room.sessionDuration,
+    sessionStartTime: room.sessionStartTime,
+    students: Array.from(room.students.values())
+      .filter((student) => !student.isDummy)
+      .map((student) => ({
+        ...serializeStudent(student),
+        upgradeCosts: getUpgradePreview(student),
+      })),
+    transferMarket: room.transferMarket.filter((p) => !p.purchasedBy),
+    matchState: room.matchState,
   };
 }
 
