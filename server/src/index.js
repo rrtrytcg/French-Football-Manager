@@ -11,6 +11,7 @@ import {
   buyPlayer,
   buyMysteryBox,
   createRoom,
+  customizeTeam,
   getStudentState,
   importQuizletSet,
   kickStudent,
@@ -21,6 +22,8 @@ import {
   startSession,
   stopSession,
   startMatch,
+  startLeague,
+  stopLeague,
   startPenaltyShootout,
   submitPenaltyAnswer,
 } from "./roomStore.js";
@@ -111,6 +114,36 @@ io.on("connection", (socket) => {
       return;
     }
     callback?.({ ok: true });
+  });
+
+  socket.on("teacher:start-league", ({ code }, callback) => {
+    const result = startLeague(code, emitRoomState);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({ ok: true });
+  });
+
+  socket.on("teacher:stop-league", ({ code }, callback) => {
+    const result = stopLeague(code);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({ ok: true });
+  });
+
+  socket.on("student:customize-team", ({ code, jerseyColor, jerseyStyle }, callback) => {
+    const result = customizeTeam(code, socket.id, jerseyColor, jerseyStyle);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({ ok: true, student: serializeStudentWithCosts(result.student) });
   });
 
   socket.on("student:join-room", ({ code, teamName }, callback) => {

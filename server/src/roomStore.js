@@ -41,6 +41,8 @@ function serializeStudent(student) {
     leagueRecord: student.leagueRecord,
     starPlayers: student.starPlayers,
     activeBoosts: student.activeBoosts || {},
+    jerseyColor: student.jerseyColor || "bleu",
+    jerseyStyle: student.jerseyStyle || "solid",
   };
 }
 
@@ -198,6 +200,7 @@ export function createRoom(teacherSocketId) {
     code,
     teacherSocketId,
     status: "lobby",
+    leagueStatus: "waiting",
     cards: [],
     students: new Map(),
     transferMarket: STAR_PLAYERS.map((p) => ({ ...p, purchasedBy: null })),
@@ -205,6 +208,8 @@ export function createRoom(teacherSocketId) {
     matchInterval: null,
     sessionDuration: 30,
     sessionStartTime: null,
+    timeRemaining: 0,
+    timerInterval: null,
   };
   rooms.set(code, room);
   return room;
@@ -600,6 +605,113 @@ export function startMatch(code, emitState) {
   return { room };
 }
 
+export function startLeague(code, emitState) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+  if (room.leagueStatus === "active") {
+    return { error: "League already active." };
+  }
+
+  room.leagueStatus = "active";
+  room.timeRemaining = 40000; // 40 seconds
+  
+  // Start the timer
+  room.timerInterval = setInterval(() => {
+    room.timeRemaining -= 1000;
+    if (emitState) emitState(room);
+    
+    if (room.timeRemaining <= 0) {
+      // Time's up - start match automatically
+      clearInterval(room.timerInterval);
+      runMatchCycle(room, emitState);
+      
+      // After match ends, restart timer
+      setTimeout(() => {
+        room.timeRemaining = 40000;
+        room.timerInterval = setInterval(() => {
+          room.timeRemaining -= 1000;
+          if (emitState) emitState(room);
+          
+          if (room.timeRemaining <= 0) {
+            clearInterval(room.timerInterval);
+            runMatchCycle(room, emitState);
+            // Restart timer again (loop until stopped)
+            setTimeout(() => {
+              if (room.leagueStatus === "active") {
+                room.timeRemaining = 40000;
+                room.timerInterval = setInterval(() => {
+                  room.timeRemaining -= 1000;
+                  if (emitState) emitState(room);
+                  
+                  if (room.timeRemaining <= 0) {
+                    clearInterval(room.timerInterval);
+                    runMatchCycle(room, emitState);
+                    // Continue the loop...
+                    startLeagueTimer(room, emitState);
+                  }
+                }, 1000);
+              }
+            }, 25000); // 20s match + 5s showing scores
+          }
+        }, 1000);
+      }, 25000); // Wait for match to complete
+    }
+  }, 1000);
+
+  return { room };
+}
+
+function startLeagueTimer(room, emitState) {
+  room.timeRemaining = 40000;
+  room.timerInterval = setInterval(() => {
+    room.timeRemaining -= 1000;
+    if (emitState) emitState(room);
+    
+    if (room.timeRemaining <= 0) {
+      clearInterval(room.timerInterval);
+      runMatchCycle(room, emitState);
+      
+      // Restart timer
+      setTimeout(() => {
+        if (room.leagueStatus === "active") {
+          startLeagueTimer(room, emitState);
+        }
+      }, 25000);
+    }
+  }, 1000);
+}
+
+export function stopLeague(code) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+
+  if (room.timerInterval) {
+    clearInterval(room.timerInterval);
+    room.timerInterval = null;
+  }
+  room.leagueStatus = "ended";
+  room.timeRemaining = 0;
+
+  return { room };
+}
+
+export function customizeTeam(code, socketId, jerseyColor, jerseyStyle) {
+  const room = getRoom(code);
+  const student = room?.students.get(socketId);
+  if (!room || !student) {
+    return { error: "Student not found." };
+  }
+
+  student.jerseyColor = jerseyColor;
+  student.jerseyStyle = jerseyStyle;
+
+  return { student, room };
+}
+
 export function stopSession(code) {
   const room = getRoom(code);
   if (!room) {
@@ -670,9 +782,11 @@ export function serializeRoom(room) {
     code: room.code,
     teacherSocketId: room.teacherSocketId,
     status: room.status,
+    leagueStatus: room.leagueStatus || "waiting",
     cardsLoaded: room.cards.length,
     sessionDuration: room.sessionDuration,
     sessionStartTime: room.sessionStartTime,
+    timeRemaining: room.timeRemaining || 0,
     students: Array.from(room.students.values())
       .filter((student) => !student.isDummy)
       .map((student) => ({

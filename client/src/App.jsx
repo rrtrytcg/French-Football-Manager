@@ -11,7 +11,27 @@ const defaultRoom = {
   transferMarket: [],
   matchState: null,
   status: "lobby",
+  leagueStatus: "waiting",
+  timeRemaining: 0,
 };
+
+const JERSEY_COLORS = [
+  { id: "bleu", name: "Bleu", primary: "#0055A4", secondary: "#FFFFFF" },
+  { id: "rouge", name: "Rouge", primary: "#EF4444", secondary: "#FFFFFF" },
+  { id: "vert", name: "Vert", primary: "#22C55E", secondary: "#FFFFFF" },
+  { id: "jaune", name: "Jaune", primary: "#EAB308", secondary: "#000000" },
+  { id: "violet", name: "Violet", primary: "#A855F7", secondary: "#FFFFFF" },
+  { id: "orange", name: "Orange", primary: "#F97316", secondary: "#FFFFFF" },
+  { id: "noir", name: "Noir", primary: "#1E293B", secondary: "#FFFFFF" },
+  { id: "blanc", name: "Blanc", primary: "#FFFFFF", secondary: "#1E293B" },
+];
+
+const JERSEY_STYLES = [
+  { id: "solid", name: "Uni" },
+  { id: "stripes-h", name: "Rayures Horizontales" },
+  { id: "stripes-v", name: "Rayures Verticales" },
+  { id: "halves", name: "Deux Tons" },
+];
 
 const statLabels = {
   attaque: "Attaque",
@@ -31,6 +51,113 @@ function Panel({ title, subtitle, children, className = "" }) {
       </div>
       {children}
     </section>
+  );
+}
+
+function MysteryBoxModal({ reward, onClose }) {
+  const [isOpening, setIsOpening] = useState(true);
+  const [showReward, setShowReward] = useState(false);
+
+  useEffect(() => {
+    const timer1 = setTimeout(() => setIsOpening(false), 1000);
+    const timer2 = setTimeout(() => setShowReward(true), 1500);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, []);
+
+  const getRewardIcon = () => {
+    if (reward.type === "euros") {
+      if (reward.value >= 300) return "💰";
+      if (reward.value >= 150) return "💵";
+      return "🪙";
+    }
+    if (reward.type === "upgrade") return "⚡";
+    if (reward.type === "boost") return "🔥";
+    return "🎁";
+  };
+
+  const getRewardColor = () => {
+    if (reward.type === "euros") {
+      if (reward.value >= 300) return "text-yellow-400";
+      if (reward.value >= 150) return "text-green-400";
+      return "text-slate-300";
+    }
+    if (reward.type === "upgrade") return "text-purple-400";
+    if (reward.type === "boost") return "text-orange-400";
+    return "text-white";
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="rounded-3xl border border-purple-500/50 bg-slate-900/95 p-8 text-center shadow-2xl max-w-md w-full mx-4">
+        {isOpening ? (
+          <div className="py-12">
+            <div className="mb-4 text-6xl animate-bounce">🎁</div>
+            <p className="font-display text-2xl uppercase tracking-[0.2em] text-purple-400 animate-pulse">
+              Ouverture...
+            </p>
+          </div>
+        ) : showReward ? (
+          <div className="py-8">
+            <div className={`mb-6 text-8xl animate-pulse ${getRewardColor()}`}>
+              {getRewardIcon()}
+            </div>
+            <h3 className={`mb-4 font-display text-3xl font-bold uppercase tracking-[0.15em] ${getRewardColor()}`}>
+              {reward.message}
+            </h3>
+            <button
+              onClick={onClose}
+              className="mt-6 rounded-full bg-purple-500 px-8 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white transition hover:bg-purple-400"
+            >
+              Super!
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function JerseyPreview({ color, style, size = "large" }) {
+  const sizeClasses = size === "large" ? "w-32 h-40" : "w-16 h-20";
+  
+  const getPattern = () => {
+    switch (style) {
+      case "stripes-h":
+        return `repeating-linear-gradient(0deg, ${color.secondary} 0px, ${color.secondary} 8px, ${color.primary} 8px, ${color.primary} 16px)`;
+      case "stripes-v":
+        return `repeating-linear-gradient(90deg, ${color.secondary} 0px, ${color.secondary} 8px, ${color.primary} 8px, ${color.primary} 16px)`;
+      case "halves":
+        return `linear-gradient(90deg, ${color.primary} 50%, ${color.secondary} 50%)`;
+      default:
+        return color.primary;
+    }
+  };
+
+  return (
+    <div className={`relative ${sizeClasses}`}>
+      {/* Jersey body */}
+      <div 
+        className="absolute inset-0 rounded-lg"
+        style={{ background: getPattern() }}
+      />
+      {/* Collar */}
+      <div 
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-4 rounded-b-full"
+        style={{ backgroundColor: color.secondary }}
+      />
+      {/* Sleeves */}
+      <div 
+        className="absolute -left-2 top-4 w-4 h-12 rounded-l-lg"
+        style={{ backgroundColor: style === "halves" ? color.primary : color.secondary }}
+      />
+      <div 
+        className="absolute -right-2 top-4 w-4 h-12 rounded-r-lg"
+        style={{ backgroundColor: style === "halves" ? color.secondary : color.secondary }}
+      />
+    </div>
   );
 }
 
@@ -396,13 +523,49 @@ function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoo
               Start Session
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={onStop}
-              className="rounded-full bg-rose-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white"
-            >
-              Stop Session
-            </button>
+            <>
+              {room.leagueStatus === "waiting" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    socket.emit("teacher:start-league", { code: room.code }, (response) => {
+                      if (response?.ok) {
+                        setMessage("Ligue demarree! 40 secondes pour jouer!");
+                      } else {
+                        setMessage(response?.error || "Erreur");
+                      }
+                    });
+                  }}
+                  className="rounded-full bg-green-600 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white animate-pulse"
+                >
+                  Demarrer la Ligue!
+                </button>
+              )}
+              {room.leagueStatus === "active" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    socket.emit("teacher:stop-league", { code: room.code }, (response) => {
+                      if (response?.ok) {
+                        setMessage("Ligue terminee!");
+                      } else {
+                        setMessage(response?.error || "Erreur");
+                      }
+                    });
+                  }}
+                  className="rounded-full bg-rose-600 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white"
+                >
+                  Terminer la Ligue
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onStop}
+                className="rounded-full bg-rose-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white"
+              >
+                Stop Session
+              </button>
+            </>
           )}
         </div>
 
@@ -448,11 +611,14 @@ function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoo
   );
 }
 
-function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUpgrade, onBuyPlayer }) {
+function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUpgrade, onBuyPlayer, onCustomizeTeam }) {
   const [joinCode, setJoinCode] = useState("");
   const [teamName, setTeamName] = useState("");
   const [studentMessage, setStudentMessage] = useState("");
   const [loadingQuestion, setLoadingQuestion] = useState(false);
+  const [mysteryBoxReward, setMysteryBoxReward] = useState(null);
+  const [selectedColor, setSelectedColor] = useState(student?.jerseyColor || "bleu");
+  const [selectedStyle, setSelectedStyle] = useState(student?.jerseyStyle || "solid");
 
   const handleJoin = () => {
     onJoin(joinCode, teamName, setStudentMessage);
@@ -473,6 +639,20 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
 
   const handleBuyPlayer = (playerId) => {
     onBuyPlayer(playerId, setStudentMessage);
+  };
+
+  const handleBuyMysteryBox = () => {
+    socket.emit("student:buy-mystery-box", { code: room.code }, (response) => {
+      if (response?.ok) {
+        setMysteryBoxReward(response.reward);
+      } else {
+        alert(response?.error || "Erreur");
+      }
+    });
+  };
+
+  const handleCustomize = () => {
+    onCustomizeTeam(selectedColor, selectedStyle);
   };
 
   if (!student) {
@@ -505,6 +685,8 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
   }
 
   const isSimulating = room.matchState?.phase === "simulating";
+  const isLeagueActive = room.leagueStatus === "active";
+  const isInLobby = room.leagueStatus === "waiting" || !room.leagueStatus;
 
   return (
     <div className="space-y-6">
@@ -853,9 +1035,256 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
         )}
       </Panel>
 
+      {mysteryBoxReward && (
+        <MysteryBoxModal 
+          reward={mysteryBoxReward} 
+          onClose={() => setMysteryBoxReward(null)} 
+        />
+      )}
+
+      {isInLobby && (
+        <Panel title="Personnalisation" subtitle="Designez votre equipe avant le debut de la ligue!">
+          <div className="space-y-6">
+            {/* Jersey Preview */}
+            <div className="flex justify-center">
+              <JerseyPreview 
+                color={JERSEY_COLORS.find(c => c.id === selectedColor)} 
+                style={selectedStyle}
+                size="large"
+              />
+            </div>
+
+            {/* Color Selection */}
+            <div>
+              <h4 className="mb-3 font-display text-lg uppercase tracking-[0.15em] text-white">Couleur</h4>
+              <div className="flex flex-wrap gap-3 justify-center">
+                {JERSEY_COLORS.map((color) => (
+                  <button
+                    key={color.id}
+                    onClick={() => setSelectedColor(color.id)}
+                    className={`w-12 h-12 rounded-full border-4 transition ${
+                      selectedColor === color.id 
+                        ? 'border-white scale-110' 
+                        : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color.primary }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Style Selection */}
+            <div>
+              <h4 className="mb-3 font-display text-lg uppercase tracking-[0.15em] text-white">Style</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {JERSEY_STYLES.map((style) => (
+                  <button
+                    key={style.id}
+                    onClick={() => setSelectedStyle(style.id)}
+                    className={`rounded-xl border p-3 transition ${
+                      selectedStyle === style.id
+                        ? 'border-teal-400 bg-teal-400/20'
+                        : 'border-white/10 hover:border-white/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <JerseyPreview 
+                        color={JERSEY_COLORS.find(c => c.id === selectedColor)}
+                        style={style.id}
+                        size="small"
+                      />
+                      <span className="text-sm text-white">{style.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleCustomize}
+              className="w-full rounded-full bg-teal-400 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:bg-teal-300"
+            >
+              Sauvegarder Design
+            </button>
+          </div>
+        </Panel>
+      )}
+
+      {/* Timer Display */}
+      {isLeagueActive && room.timeRemaining > 0 && (
+        <div className="rounded-3xl border-2 border-gold/50 bg-slate-950/90 p-6 text-center">
+          <div className="mb-2 font-display text-lg uppercase tracking-[0.3em] text-slate-400">
+            Prochain Match Dans
+          </div>
+          <div className="font-display text-6xl font-bold text-gold animate-pulse">
+            {Math.floor(room.timeRemaining / 1000)}s
+          </div>
+        </div>
+      )}
+
+      {/* Waiting Message in Lobby */}
+      {isInLobby && (
+        <Panel title="Salle d'Attente" subtitle="Le professeur va bientot demarrer la ligue!">
+          <div className="text-center py-8">
+            <div className="mb-4 text-6xl">⏳</div>
+            <p className="font-display text-2xl uppercase tracking-[0.15em] text-slate-300">
+              En attente du professeur...
+            </p>
+            <p className="mt-4 text-slate-400">
+              Personnalisez votre equipe en attendant!
+            </p>
+          </div>
+        </Panel>
+      )}
+
+      <Panel title="Club Office" subtitle={isLeagueActive ? "Repondez vite! Le match commence bientot!" : "La ligue n'a pas encore commence."}>
+        {!isLeagueActive && !isSimulating ? (
+          <div className="text-center py-8">
+            <div className="mb-4 text-6xl">🔒</div>
+            <p className="font-display text-2xl uppercase tracking-[0.15em] text-slate-400">
+              Questions bloquees
+            </p>
+            <p className="mt-2 text-slate-500">
+              Le professeur doit demarrer la ligue pour jouer.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Club</div>
+                <div className="font-display text-2xl font-bold uppercase text-white">{student.teamName}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Euros</div>
+                <div className="font-display text-2xl font-bold text-gold">EUR {student.euros}</div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Streak</div>
+                <div className="font-display text-2xl font-bold text-white">
+                  {student.streak}
+                  {student.streak >= 5 && student.bonusActiveUntil > Date.now() && (
+                    <span className="ml-2 text-xs text-gold">2X!</span>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Points</div>
+                <div className="font-display text-2xl font-bold text-teal-300">
+                  {student.leagueRecord.points}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-teal-400/20 bg-slate-950/80 p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <h3 className="font-display text-2xl uppercase tracking-[0.14em] text-white">
+                  Question Engine
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleGetQuestion}
+                  disabled={loadingQuestion || isSimulating}
+                  className="rounded-full border border-teal-400/40 px-4 py-2 font-display uppercase tracking-[0.14em] text-teal-200 disabled:opacity-50"
+                >
+                  {loadingQuestion ? "Loading..." : isSimulating ? "Match..." : room.question ? "Refresh" : "New Question"}
+                </button>
+              </div>
+
+              {room.question ? (
+                <div>
+                  <p className="mb-4 font-display text-4xl font-bold uppercase tracking-[0.1em] text-white">
+                    {room.question.prompt}
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {room.question.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => handleAnswer(option.id)}
+                        className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-4 text-left text-white transition hover:border-teal-300/60 hover:bg-slate-800"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-400">
+                  {isSimulating
+                    ? "Match en cours. Attendez la prochaine manche."
+                    : "Cliquez sur New Question quand le professeur a charge le vocabulaire."}
+                </p>
+              )}
+            </div>
+
+            {studentMessage && (
+              <p className={`mt-4 text-sm ${studentMessage.includes("Incorrect") || studentMessage.includes("Erreur") ? "text-rose-300" : "text-teal-200"}`}>
+                {studentMessage}
+              </p>
+            )}
+          </>
+        )}
+      </Panel>
+
+      {isLeagueActive && !isSimulating && (
+        <>
+          <Panel title="One-Click Training" subtitle="Upgrade your team stats.">
+            <div className="grid gap-4 md:grid-cols-2">
+              {Object.entries(statLabels).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleUpgrade(key)}
+                  className="rounded-3xl border border-white/10 bg-slate-950/80 p-5 text-left transition hover:border-gold/40"
+                >
+                  <div className="font-display text-2xl font-bold uppercase tracking-[0.14em] text-white">
+                    {label}
+                  </div>
+                  <div className="mt-2 text-slate-400">Niveau actuel: {student.stats[key]}</div>
+                  <div className="mt-1 text-gold">
+                    Cout: EUR {student.upgradeCosts?.[key] ?? "-"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Mercato" subtitle="Sign star players to boost your team.">
+            {room.transferMarket.length === 0 ? (
+              <p className="text-slate-400">Tous les joueurs ont ete signs.</p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {room.transferMarket.map((player) => (
+                  <button
+                    key={player.id}
+                    type="button"
+                    onClick={() => handleBuyPlayer(player.id)}
+                    className="rounded-3xl border border-white/10 bg-slate-950/80 p-4 text-left transition hover:border-gold/40"
+                  >
+                    <div className="font-display text-xl font-bold uppercase tracking-[0.1em] text-white">
+                      {player.name}
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm text-slate-400">
+                      {Object.entries(player.statBoosts).map(([stat, boost]) => (
+                        <div key={stat}>
+                          {statLabels[stat]}: +{boost}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-gold">EUR {player.cost}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </>
+      )}
+
       <Panel title="Boite Mystere" subtitle="Tentez votre chance!">
-        {isSimulating ? (
-          <p className="text-slate-400">Boite Mystere fermee pendant le match.</p>
+        {isSimulating || !isLeagueActive ? (
+          <p className="text-slate-400">Boite Mystere fermee.</p>
         ) : (
           <div className="rounded-3xl border border-purple-500/30 bg-slate-950/80 p-6 text-center">
             <div className="mb-4 font-display text-4xl">🎁</div>
@@ -868,18 +1297,7 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
             </div>
             <button
               type="button"
-              onClick={() => {
-                console.log("Opening mystery box, room code:", room.code);
-                socket.emit("student:buy-mystery-box", { code: room.code }, (response) => {
-                  console.log("Mystery box response:", response);
-                  if (response?.ok) {
-                    setStudent(response.student);
-                    alert(`🎁 ${response.reward.message}`);
-                  } else {
-                    alert(response?.error || "Erreur");
-                  }
-                });
-              }}
+              onClick={handleBuyMysteryBox}
               disabled={student.euros < 100 || !room.code}
               className="rounded-full bg-purple-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white transition hover:bg-purple-400 disabled:opacity-50"
             >
@@ -1033,6 +1451,14 @@ function App() {
     });
   };
 
+  const handleCustomizeTeam = (jerseyColor, jerseyStyle) => {
+    socket.emit("student:customize-team", { code: joinedCodeRef.current, jerseyColor, jerseyStyle }, (response) => {
+      if (response?.ok) {
+        setStudent(response.student);
+      }
+    });
+  };
+
   if (view === "smartboard") {
     return (
       <>
@@ -1110,6 +1536,7 @@ function App() {
                 onAnswer={handleAnswer}
                 onUpgrade={handleUpgrade}
                 onBuyPlayer={handleBuyPlayer}
+                onCustomizeTeam={handleCustomizeTeam}
               />
             )}
           </div>
