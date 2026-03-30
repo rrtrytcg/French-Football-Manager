@@ -9,6 +9,7 @@ import {
   answerQuestion,
   buyUpgrade,
   buyPlayer,
+  buyMysteryBox,
   createRoom,
   getStudentState,
   importQuizletSet,
@@ -20,6 +21,8 @@ import {
   startSession,
   stopSession,
   startMatch,
+  startPenaltyShootout,
+  submitPenaltyAnswer,
 } from "./roomStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -172,6 +175,47 @@ io.on("connection", (socket) => {
       ok: true,
       player: result.player,
       student: serializeStudentWithCosts(result.student),
+    });
+  });
+
+  socket.on("student:buy-mystery-box", ({ code }, callback) => {
+    const result = buyMysteryBox(code, socket.id);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({
+      ok: true,
+      reward: result.reward,
+      student: serializeStudentWithCosts(result.student),
+    });
+  });
+
+  socket.on("teacher:start-penalty-shootout", ({ code, team1SocketId, team2SocketId }, callback) => {
+    const result = startPenaltyShootout(code, team1SocketId, team2SocketId);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({
+      ok: true,
+      penaltyShootout: result.penaltyShootout,
+    });
+  });
+
+  socket.on("student:submit-penalty-answer", ({ code, round, optionId, isCorrect }, callback) => {
+    const result = submitPenaltyAnswer(code, socket.id, round, optionId, isCorrect);
+    if (result.error) {
+      callback?.({ ok: false, error: result.error });
+      return;
+    }
+    emitRoomState(result.room);
+    callback?.({
+      ok: true,
+      score: result.teamScore,
+      shootout: result.shootout,
     });
   });
 

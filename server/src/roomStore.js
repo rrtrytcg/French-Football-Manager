@@ -7,6 +7,10 @@ import {
   DEFAULT_STATS,
   MATCH_INTERVAL_MS,
   MATCH_SIM_DURATION_MS,
+  MYSTERY_BOX_COST,
+  MYSTERY_BOX_REWARDS,
+  PENALTY_SHOOTOUT_QUESTIONS,
+  PENALTY_REWARD_WINNER,
   POINTS_DRAW,
   POINTS_LOSS,
   POINTS_WIN,
@@ -407,6 +411,153 @@ export function buyPlayer(code, socketId, playerId) {
   return { player, student, room };
 }
 
+function getRandomMysteryBoxReward() {
+  const totalWeight = MYSTERY_BOX_REWARDS.reduce((sum, r) => sum + r.weight, 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const reward of MYSTERY_BOX_REWARDS) {
+    random -= reward.weight;
+    if (random <= 0) {
+      return reward;
+    }
+  }
+  return MYSTERY_BOX_REWARDS[0];
+}
+
+export function buyMysteryBox(code, socketId) {
+  const room = getRoom(code);
+  const student = room?.students.get(socketId);
+  if (!room || !student) {
+    return { error: "Student not found." };
+  }
+  if (room.matchState?.phase === "simulating") {
+    return { error: "Match in progress. Boite mystere bloquee." };
+  }
+  if (student.euros < MYSTERY_BOX_COST) {
+    return { error: "Pas assez d'Euros pour la Boite Mystere.", cost: MYSTERY_BOX_COST };
+  }
+
+  student.euros -= MYSTERY_BOX_COST;
+  const reward = getRandomMysteryBoxReward();
+  
+  let result = { type: reward.type, message: reward.message };
+  
+  if (reward.type === "euros") {
+    student.euros += reward.value;
+    result.value = reward.value;
+  } else if (reward.type === "upgrade") {
+    student.stats[reward.stat] += 1;
+    result.stat = reward.stat;
+  } else if (reward.type === "boost") {
+    const now = Date.now();
+    student.activeBoosts = student.activeBoosts || {};
+    student.activeBoosts[reward.stat] = now + reward.duration;
+    result.stat = reward.stat;
+    result.duration = reward.duration;
+  }
+
+  return { reward: result, student, room };
+}
+
+export function startPenaltyShootout(code, team1SocketId, team2SocketId) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+  
+  const team1 = room.students.get(team1SocketId);
+  const team2 = room.students.get(team2SocketId);
+  
+  if (!team1 || !team2) {
+    return { error: "Both teams must be in the room." };
+  }
+  
+  room.penaltyShootout = {
+    phase: "active",
+    team1: { socketId: team1SocketId, teamName: team1.teamName, score: 0, answers: [] },
+    team2: { socketId: team2SocketId, teamName: team2.teamName, score: 0, answers: [] },
+    currentRound: 0,
+    questions: [],
+    startedAt: Date.now(),
+  };
+  
+  // Generate 5 questions for the shootout
+  for (let i = 0; i < PENALTY_SHOOTOUT_QUESTIONS; i++) {
+    const question = buildQuestion(room.cards, new Set());
+    if (question) {
+      room.penaltyShootout.questions.push({
+        ...question,
+        round: i + 1,
+      });
+    }
+  }
+  
+  return { room, penaltyShootout: room.penaltyShootout };
+}
+
+export function submitPenaltyAnswer(code, socketId, round, optionId, isCorrect) {
+  const room = getRoom(code);
+  if (!room || !room.penaltyShootout) {
+    return { error: "No penalty shootout active." };
+  }
+  
+  const shootout = room.penaltyShootout;
+  const isTeam1 = shootout.team1.socketId === socketId;
+  const isTeam2 = shootout.team2.socketId === socketId;
+  
+  if (!isTeam1 && !isTeam2) {
+    return { error: "Not a participant in this shootout." };
+  }
+  
+  const team = isTeam1 ? shootout.team1 : shootout.team2;
+  
+  // Record the answer
+  team.answers.push({ round, optionId, isCorrect });
+  
+  if (isCorrect) {
+    team.score += 1;
+  }
+  
+  // Check if shootout is complete
+  const totalRounds = shootout.questions.length;
+  const team1Done = shootout.team1.answers.length >= totalRounds;
+  const team2Done = shootout.team2.answers.length >= totalRounds;
+  
+  if (team1Done && team2Done) {
+    // Determine winner
+    let winner = null;
+    let isTie = false;
+    
+    if (shootout.team1.score > shootout.team2.score) {
+      winner = shootout.team1;
+    } else if (shootout.team2.score > shootout.team1.score) {
+      winner = shootout.team2;
+    } else {
+      isTie = true;
+    }
+    
+    // Award bonus
+    if (winner) {
+      const winnerStudent = room.students.get(winner.socketId);
+      if (winnerStudent) {
+        winnerStudent.euros += PENALTY_REWARD_WINNER;
+        winnerStudent.leagueRecord.points += 1; // Bonus point
+      }
+    }
+    
+    shootout.phase = "complete";
+    shootout.winner = winner;
+    shootout.isTie = isTie;
+    
+    // Clear after a delay
+    setTimeout(() => {
+      room.penaltyShootout = null;
+    }, 30000);
+  }
+  
+  return { room, shootout, teamScore: team.score };
+}
+
 export function kickStudent(code, studentSocketId) {
   const room = getRoom(code);
   if (!room) {
@@ -527,6 +678,7 @@ export function serializeRoom(room) {
       })),
     transferMarket: room.transferMarket.filter((p) => !p.purchasedBy),
     matchState: room.matchState,
+    penaltyShootout: room.penaltyShootout,
   };
 }
 

@@ -53,3 +53,18 @@ export const COMMENTARY_LINES = {
     "Si pres du but !",
   ],
 };
+
+export const MYSTERY_BOX_COST = 100;
+export const MYSTERY_BOX_REWARDS = [
+  { type: "euros", value: 50, message: "+50 EUR!", weight: 30 },
+  { type: "euros", value: 150, message: "+150 EUR! Gros lot!", weight: 15 },
+  { type: "euros", value: 300, message: "+300 EUR! Jackpot!", weight: 5 },
+  { type: "upgrade", stat: "attaque", message: "Attaque +1 gratuit!", weight: 12 },
+  { type: "upgrade", stat: "defense", message: "Defense +1 gratuit!", weight: 12 },
+  { type: "upgrade", stat: "passes", message: "Passes +1 gratuit!", weight: 12 },
+  { type: "upgrade", stat: "gardien", message: "Gardien +1 gratuit!", weight: 12 },
+  { type: "boost", stat: "attaque", duration: 60000, message: "Boost Attaque 60s!", weight: 1 },
+];
+
+export const PENALTY_SHOOTOUT_QUESTIONS = 5;
+export const PENALTY_REWARD_WINNER = 100;

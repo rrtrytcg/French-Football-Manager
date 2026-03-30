@@ -224,6 +224,8 @@ function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoo
   const [duration, setDuration] = useState(30);
   const [message, setMessage] = useState("");
   const [showQuizlet, setShowQuizlet] = useState(true);
+  const [penaltyTeam1, setPenaltyTeam1] = useState("");
+  const [penaltyTeam2, setPenaltyTeam2] = useState("");
 
   const handleImport = () => {
     if (!room.code) {
@@ -321,13 +323,64 @@ function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoo
             />
           </div>
           {isPlaying && !isSimulating && (
-            <button
-              type="button"
-              onClick={() => onStartMatch(setMessage)}
-              className="rounded-full bg-gold px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-slate-950"
-            >
-              Start Match
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => onStartMatch(setMessage)}
+                className="rounded-full bg-gold px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-slate-950"
+              >
+                Start Match
+              </button>
+              {room.students.length >= 2 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <select
+                      value={penaltyTeam1}
+                      onChange={(e) => setPenaltyTeam1(e.target.value)}
+                      className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-2 text-white text-sm"
+                    >
+                      <option value="">Equipe 1</option>
+                      {room.students.map((s) => (
+                        <option key={s.socketId} value={s.socketId}>{s.teamName}</option>
+                      ))}
+                    </select>
+                    <span className="text-slate-400 self-center">VS</span>
+                    <select
+                      value={penaltyTeam2}
+                      onChange={(e) => setPenaltyTeam2(e.target.value)}
+                      className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-2 text-white text-sm"
+                    >
+                      <option value="">Equipe 2</option>
+                      {room.students.map((s) => (
+                        <option key={s.socketId} value={s.socketId}>{s.teamName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!penaltyTeam1 || !penaltyTeam2 || penaltyTeam1 === penaltyTeam2}
+                    onClick={() => {
+                      socket.emit("teacher:start-penalty-shootout", {
+                        code: room.code,
+                        team1SocketId: penaltyTeam1,
+                        team2SocketId: penaltyTeam2
+                      }, (response) => {
+                        if (response?.ok) {
+                          setMessage("Tirs au but demarres!");
+                          setPenaltyTeam1("");
+                          setPenaltyTeam2("");
+                        } else {
+                          setMessage(response?.error || "Erreur");
+                        }
+                      });
+                    }}
+                    className="rounded-full bg-orange-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"
+                  >
+                    Demarrer Tirs au But
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {isSimulating && (
             <div className="rounded-full bg-gold/20 px-6 py-3 font-display text-lg uppercase tracking-[0.14em] text-gold animate-pulse">
@@ -531,6 +584,148 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
         )}
       </Panel>
 
+      {room.penaltyShootout?.phase === "active" && (
+        <Panel title="⚽ TIRS AU BUT!" subtitle="5 questions rapides - le gagnant remporte un point bonus!">
+          <div className="space-y-6">
+            {/* Score Display */}
+            <div className="flex items-center justify-center gap-8">
+              <div className="text-center">
+                <div className="font-display text-2xl uppercase tracking-[0.1em] text-white">
+                  {room.penaltyShootout.team1.teamName}
+                </div>
+                <div className="font-display text-5xl font-bold text-gold">
+                  {room.penaltyShootout.team1.score}
+                </div>
+              </div>
+              <div className="font-display text-4xl text-slate-500">-</div>
+              <div className="text-center">
+                <div className="font-display text-2xl uppercase tracking-[0.1em] text-white">
+                  {room.penaltyShootout.team2.teamName}
+                </div>
+                <div className="font-display text-5xl font-bold text-gold">
+                  {room.penaltyShootout.team2.score}
+                </div>
+              </div>
+            </div>
+
+            {/* Current Question */}
+            {(() => {
+              const isParticipant = room.penaltyShootout.team1.socketId === socket.id || 
+                                   room.penaltyShootout.team2.socketId === socket.id;
+              const myTeam = room.penaltyShootout.team1.socketId === socket.id ? room.penaltyShootout.team1 : 
+                            room.penaltyShootout.team2.socketId === socket.id ? room.penaltyShootout.team2 : null;
+              
+              if (!isParticipant) {
+                return (
+                  <div className="text-center text-slate-400">
+                    <p>Regardez les tirs au but en cours...</p>
+                  </div>
+                );
+              }
+
+              const currentRound = myTeam.answers.length + 1;
+              const question = room.penaltyShootout.questions[currentRound - 1];
+              
+              if (!question || currentRound > 5) {
+                return (
+                  <div className="text-center">
+                    <p className="text-teal-300 font-display text-2xl">
+                      {room.penaltyShootout.phase === "complete" 
+                        ? "Tirs au but termines!" 
+                        : "En attente des autres joueurs..."}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="rounded-3xl border border-orange-500/30 bg-slate-950/90 p-6">
+                  <div className="mb-4 text-center">
+                    <span className="font-display text-xl uppercase tracking-[0.2em] text-orange-400">
+                      Tir {currentRound}/5
+                    </span>
+                  </div>
+                  <p className="mb-6 font-display text-4xl font-bold uppercase tracking-[0.1em] text-white text-center">
+                    {question.prompt}
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {question.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          socket.emit("student:submit-penalty-answer", {
+                            code: joinedCodeRef.current,
+                            round: currentRound,
+                            optionId: option.id,
+                            isCorrect: option.isCorrect
+                          }, (response) => {
+                            if (response?.ok) {
+                              if (option.isCorrect) {
+                                alert("✅ BUT!");
+                              } else {
+                                alert("❌ Rate!");
+                              }
+                            }
+                          });
+                        }}
+                        className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-4 text-left text-white transition hover:border-orange-400/60 hover:bg-slate-800"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </Panel>
+      )}
+
+      {room.penaltyShootout?.phase === "complete" && (
+        <Panel title="🏆 Resultat Tirs au But" subtitle="Le gagnant remporte 1 point bonus + 100 EUR!">
+          <div className="text-center space-y-4">
+            <div className="flex items-center justify-center gap-8 mb-6">
+              <div className="text-center">
+                <div className="font-display text-2xl uppercase tracking-[0.1em] text-white">
+                  {room.penaltyShootout.team1.teamName}
+                </div>
+                <div className="font-display text-6xl font-bold text-gold">
+                  {room.penaltyShootout.team1.score}
+                </div>
+              </div>
+              <div className="font-display text-4xl text-slate-500">-</div>
+              <div className="text-center">
+                <div className="font-display text-2xl uppercase tracking-[0.1em] text-white">
+                  {room.penaltyShootout.team2.teamName}
+                </div>
+                <div className="font-display text-6xl font-bold text-gold">
+                  {room.penaltyShootout.team2.score}
+                </div>
+              </div>
+            </div>
+            
+            {room.penaltyShootout.winner ? (
+              <div className="rounded-3xl bg-green-500/20 border border-green-500/50 p-6">
+                <div className="font-display text-4xl mb-2">🎉</div>
+                <div className="font-display text-3xl uppercase tracking-[0.15em] text-green-400">
+                  {room.penaltyShootout.winner.teamName} GAGNE!
+                </div>
+                <p className="mt-2 text-slate-300">+1 point bonus et +100 EUR!</p>
+              </div>
+            ) : room.penaltyShootout.isTie ? (
+              <div className="rounded-3xl bg-yellow-500/20 border border-yellow-500/50 p-6">
+                <div className="font-display text-4xl mb-2">⚖️</div>
+                <div className="font-display text-3xl uppercase tracking-[0.15em] text-yellow-400">
+                  MATCH NUL!
+                </div>
+                <p className="mt-2 text-slate-300">Aucun point bonus</p>
+              </div>
+            ) : null}
+          </div>
+        </Panel>
+      )}
+
       {isSimulating && room.matchState?.pairings && (
         <Panel title="Match en Cours" subtitle="Votre match en direct">
           <div className="space-y-4">
@@ -650,6 +845,40 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
                 <div className="mt-3 text-gold">EUR {player.cost}</div>
               </button>
             ))}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Boite Mystere" subtitle="Tentez votre chance!">
+        {isSimulating ? (
+          <p className="text-slate-400">Boite Mystere fermee pendant le match.</p>
+        ) : (
+          <div className="rounded-3xl border border-purple-500/30 bg-slate-950/80 p-6 text-center">
+            <div className="mb-4 font-display text-4xl">🎁</div>
+            <p className="mb-4 text-slate-300">
+              Gagnez des Euros, des ameliorations gratuites ou des boosts!
+            </p>
+            <div className="mb-4 space-y-2 text-sm text-slate-400">
+              <div>Prix: EUR 100</div>
+              <div className="text-xs">Recompenses possibles: +50 EUR, +150 EUR, +300 EUR, stats gratuites...</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                socket.emit("student:buy-mystery-box", { code: joinedCodeRef.current }, (response) => {
+                  if (response?.ok) {
+                    setStudent(response.student);
+                    alert(`🎁 ${response.reward.message}`);
+                  } else {
+                    alert(response?.error || "Erreur");
+                  }
+                });
+              }}
+              disabled={student.euros < 100}
+              className="rounded-full bg-purple-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white transition hover:bg-purple-400 disabled:opacity-50"
+            >
+              Ouvrir la Boite (EUR 100)
+            </button>
           </div>
         )}
       </Panel>
