@@ -654,18 +654,22 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
                         key={option.id}
                         type="button"
                         onClick={() => {
+                          console.log("Submitting penalty answer, room code:", room.code, "round:", currentRound);
                           socket.emit("student:submit-penalty-answer", {
-                            code: joinedCodeRef.current,
+                            code: room.code,
                             round: currentRound,
                             optionId: option.id,
                             isCorrect: option.isCorrect
                           }, (response) => {
+                            console.log("Penalty answer response:", response);
                             if (response?.ok) {
                               if (option.isCorrect) {
                                 alert("✅ BUT!");
                               } else {
                                 alert("❌ Rate!");
                               }
+                            } else {
+                              alert(response?.error || "Erreur");
                             }
                           });
                         }}
@@ -865,7 +869,9 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
             <button
               type="button"
               onClick={() => {
-                socket.emit("student:buy-mystery-box", { code: joinedCodeRef.current }, (response) => {
+                console.log("Opening mystery box, room code:", room.code);
+                socket.emit("student:buy-mystery-box", { code: room.code }, (response) => {
+                  console.log("Mystery box response:", response);
                   if (response?.ok) {
                     setStudent(response.student);
                     alert(`🎁 ${response.reward.message}`);
@@ -874,7 +880,7 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
                   }
                 });
               }}
-              disabled={student.euros < 100}
+              disabled={student.euros < 100 || !room.code}
               className="rounded-full bg-purple-500 px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-white transition hover:bg-purple-400 disabled:opacity-50"
             >
               Ouvrir la Boite (EUR 100)
