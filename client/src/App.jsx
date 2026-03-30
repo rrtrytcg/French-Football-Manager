@@ -652,6 +652,7 @@ function StudentDashboard({ student, room, onJoin, onGetQuestion, onAnswer, onUp
   };
 
   const handleCustomize = () => {
+    console.log("Saving customization:", selectedColor, selectedStyle);
     onCustomizeTeam(selectedColor, selectedStyle);
   };
 
@@ -1452,9 +1453,13 @@ function App() {
   };
 
   const handleCustomizeTeam = (jerseyColor, jerseyStyle) => {
-    socket.emit("student:customize-team", { code: joinedCodeRef.current, jerseyColor, jerseyStyle }, (response) => {
+    console.log("Emitting customize-team:", room.code, jerseyColor, jerseyStyle);
+    socket.emit("student:customize-team", { code: room.code, jerseyColor, jerseyStyle }, (response) => {
+      console.log("Customize response:", response);
       if (response?.ok) {
         setStudent(response.student);
+      } else {
+        alert(response?.error || "Erreur de personnalisation");
       }
     });
   };
