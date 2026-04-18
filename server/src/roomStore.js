@@ -17,7 +17,7 @@ import {
   STATS,
   STAR_PLAYERS,
 } from "./constants.js";
-import { buildQuestion, parseQuizletText } from "./quiz.js";
+import { buildQuestion, parseQuizletText, buildCardsFromVocab } from "./quiz.js";
 
 const rooms = new Map();
 
@@ -229,7 +229,8 @@ export function importQuizletSet(code, rawText) {
     return { error: "Room not found." };
   }
 
-  const cards = parseQuizletText(rawText);
+  const vocabItems = parseQuizletText(rawText);
+  const cards = buildCardsFromVocab(vocabItems);
   if (cards.length < 4) {
     return { error: "At least 4 valid French-English pairs are required." };
   }
@@ -331,6 +332,9 @@ export function nextQuestion(code, socketId) {
   if (room.cards.length < 4) {
     return { error: "Teacher must import at least 4 cards first." };
   }
+  if (room.leagueStatus !== "active") {
+    return { error: "La ligue n'a pas encore commencé. Attendez le professeur." };
+  }
   if (room.matchState?.phase === "simulating") {
     return { error: "Match in progress. Wait for the next round." };
   }
@@ -348,6 +352,9 @@ export function answerQuestion(code, socketId, optionId) {
   const student = room?.students.get(socketId);
   if (!room || !student || !student.currentQuestion) {
     return { error: "No active question." };
+  }
+  if (room.leagueStatus !== "active") {
+    return { error: "La ligue n'a pas encore commencé." };
   }
   if (room.matchState?.phase === "simulating") {
     return { error: "Match in progress. Wait for the next round." };

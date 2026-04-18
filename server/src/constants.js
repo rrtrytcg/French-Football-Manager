@@ -25,6 +25,10 @@ export const STAR_PLAYERS = [
   { id: "star-6", name: "Paul Pogba", statBoosts: { passes: 4, attaque: 1 }, cost: 550 },
   { id: "star-7", name: "Raphael Varane", statBoosts: { defense: 3, gardien: 2 }, cost: 500 },
   { id: "star-8", name: "Blaise Matuidi", statBoosts: { defense: 2, passes: 3 }, cost: 450 },
+  { id: "star-9", name: "Ousmane Dembele", statBoosts: { attaque: 2, passes: 2 }, cost: 450 },
+  { id: "star-10", name: "Thierry Henry", statBoosts: { attaque: 5, passes: 2 }, cost: 800 },
+  { id: "star-11", name: "Eric Cantona", statBoosts: { attaque: 4, defense: 2 }, cost: 750 },
+  { id: "star-12", name: "Zinedine Zidane", statBoosts: { attaque: 3, passes: 5, defense: 2 }, cost: 1000 },
 ];
 
 export const COMMENTARY_LINES = {

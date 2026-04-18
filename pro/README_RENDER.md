@@ -8,14 +8,23 @@
 
 ---
 
+## ⚠️ Hosting Note
+
+This runs on **Render's free tier** (no credit card required). The server sleeps after 15 minutes of inactivity and takes **30-60 seconds to wake up** on first load. This is normal — see "For Teachers" below for how we handle it.
+
+---
+
 ## For Teachers: Use It Now
 
 **Option 1 — Use the public demo:**
 https://french-football-manager.onrender.com
 
-1. Click **"Créer une salle"**
-2. Paste Quizlet or click **"Use Sample A1"**
-3. Share QR code — students join
+1. Open link 1 minute before class (let it wake up)
+2. Click **"Créer une salle"**
+3. Paste Quizlet or click **"Use Sample A1"**
+4. Share QR code — students join
+
+**First load shows "Waking server..." — wait 30s, then it works perfectly.**
 
 **Option 2 — Deploy your own (free):**
 
@@ -26,6 +35,17 @@ https://french-football-manager.onrender.com
 3. Get your `*.onrender.com` URL
 
 No credit card. No CLI. Free forever.
+
+---
+
+## Keep It Awake During School (Optional)
+
+Render sleeps, but you can prevent it during class hours:
+
+1. Create free account at uptimerobot.com
+2. Add monitor: `https://YOUR-APP.onrender.com/health`
+3. Set interval: 5 minutes, 7:00-16:00 SGT
+4. Done — server stays warm
 
 ---
 

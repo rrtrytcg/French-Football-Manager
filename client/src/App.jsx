@@ -1408,6 +1408,74 @@ function App() {
   const [student, setStudent] = useState(null);
   const [question, setQuestion] = useState(null);
   const joinedCodeRef = useRef("");
+  const audioContextRef = useRef(null);
+  const noiseNodeRef = useRef(null);
+
+  const startCrowdSound = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = audioContextRef.current;
+    
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+
+    if (noiseNodeRef.current) {
+      return;
+    }
+
+    const bufferSize = 2 * ctx.sampleRate;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.loop = true;
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = "bandpass";
+    bandpass.frequency.value = 400;
+    bandpass.Q.value = 0.5;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.15;
+
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.3;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.1;
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+    lfo.start();
+
+    whiteNoise.connect(bandpass);
+    bandpass.connect(gain);
+    gain.connect(ctx.destination);
+    whiteNoise.start();
+
+    noiseNodeRef.current = { source: whiteNoise, lfo, gain };
+  };
+
+  const stopCrowdSound = () => {
+    if (noiseNodeRef.current) {
+      noiseNodeRef.current.source.stop();
+      noiseNodeRef.current.lfo.stop();
+      noiseNodeRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (room.matchState?.phase === "simulating") {
+      startCrowdSound();
+    } else {
+      stopCrowdSound();
+    }
+    return () => stopCrowdSound();
+  }, [room.matchState?.phase]);
 
   useEffect(() => {
     const handleRoomState = (newRoom) => {
