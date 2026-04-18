@@ -1,7 +1,7 @@
-export const BASE_REWARD = 50;
-export const BASE_UPGRADE_COST = 100;
-export const BONUS_STREAK = 5;
-export const BONUS_DURATION_MS = 30_000;
+export const BASE_REWARD = parseInt(process.env.BASE_REWARD || "50", 10);
+export const BASE_UPGRADE_COST = parseInt(process.env.BASE_UPGRADE_COST || "100", 10);
+export const BONUS_STREAK = parseInt(process.env.BONUS_STREAK || "5", 10);
+export const BONUS_DURATION_MS = parseInt(process.env.BONUS_DURATION_MS || "30000", 10);
 export const DEFAULT_STATS = {
   attaque: 1,
   defense: 1,
@@ -10,11 +10,11 @@ export const DEFAULT_STATS = {
 };
 export const STATS = Object.keys(DEFAULT_STATS);
 
-export const MATCH_INTERVAL_MS = 5 * 60 * 1000;
-export const MATCH_SIM_DURATION_MS = 20_000;
-export const POINTS_WIN = 3;
-export const POINTS_DRAW = 1;
-export const POINTS_LOSS = 0;
+export const MATCH_INTERVAL_MS = parseInt(process.env.MATCH_INTERVAL_MS || "300000", 10);
+export const MATCH_SIM_DURATION_MS = parseInt(process.env.MATCH_SIM_DURATION_MS || "20000", 10);
+export const POINTS_WIN = parseInt(process.env.POINTS_WIN || "3", 10);
+export const POINTS_DRAW = parseInt(process.env.POINTS_DRAW || "1", 10);
+export const POINTS_LOSS = parseInt(process.env.POINTS_LOSS || "0", 10);
 
 export const STAR_PLAYERS = [
   { id: "star-1", name: "Karim Benzema", statBoosts: { attaque: 3, passes: 2 }, cost: 500 },

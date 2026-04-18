@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+import { QRCodeSVG } from "qrcode.react";
 import { SERVER_URL } from "./config";
+import QuizletImporter from "./components/QuizletImporter.jsx";
 
 const socket = io(SERVER_URL, { autoConnect: true });
 
@@ -51,6 +53,64 @@ function Panel({ title, subtitle, children, className = "" }) {
       </div>
       {children}
     </section>
+  );
+}
+
+function RoomJoinQR({ roomCode, className = "" }) {
+  const [copied, setCopied] = useState(false);
+  const joinUrl = typeof window !== "undefined" 
+    ? `${window.location.origin}?code=${roomCode}` 
+    : "";
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = roomCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  if (!roomCode) return null;
+
+  return (
+    <div className={`flex flex-col items-center gap-4 rounded-3xl border border-gold/30 bg-slate-950/80 p-6 ${className}`}>
+      <div className="rounded-2xl bg-white p-3">
+        <QRCodeSVG 
+          value={joinUrl} 
+          size={180}
+          level="H"
+          includeMargin={false}
+        />
+      </div>
+      <div className="text-center">
+        <p className="mb-2 font-display text-sm uppercase tracking-[0.2em] text-slate-400">
+          Code de la Salle
+        </p>
+        <button
+          onClick={handleCopyCode}
+          className="font-display text-5xl font-bold tracking-[0.15em] text-gold hover:text-gold/80 transition cursor-pointer"
+          title="Click to copy"
+        >
+          {roomCode}
+        </button>
+        {copied && (
+          <p className="mt-2 text-sm text-teal-300 animate-pulse">Code copié!</p>
+        )}
+      </div>
+      <p className="text-center text-xs text-slate-500 max-w-[200px]">
+        Scannez le QR ou entrez le code à 4 chiffres
+      </p>
+    </div>
   );
 }
 
@@ -352,21 +412,21 @@ function SmartboardView({ room }) {
 }
 
 function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoom, onStartMatch }) {
-  const [rawQuizlet, setRawQuizlet] = useState(
-    "bonjour\thello\nchat\tcat\nchien\tdog\nmerci\tthanks\nbonsoir\tgood evening\noui\tyes\nnon\tno\nmaison\thouse"
-  );
   const [duration, setDuration] = useState(30);
   const [message, setMessage] = useState("");
-  const [showQuizlet, setShowQuizlet] = useState(true);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [penaltyTeam1, setPenaltyTeam1] = useState("");
   const [penaltyTeam2, setPenaltyTeam2] = useState("");
 
-  const handleImport = () => {
+  const handleVocabImport = (items) => {
     if (!room.code) {
       setMessage("Create a room first.");
+      setShowImportModal(false);
       return;
     }
-    onImport(rawQuizlet, setMessage);
+    const rawText = items.map(item => `${item.fr}\t${item.en}`).join('\n');
+    onImport(rawText, setMessage);
+    setShowImportModal(false);
   };
 
   const handleStart = () => {
@@ -411,38 +471,43 @@ function TeacherDashboard({ room, onImport, onKick, onStart, onStop, onCreateRoo
           </div>
         </div>
 
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => setShowQuizlet(!showQuizlet)}
-            className="mb-2 text-sm uppercase tracking-[0.15em] text-slate-400 hover:text-white"
-          >
-            {showQuizlet ? "Hide Vocabulary Input" : "Show Vocabulary Input"}
-          </button>
-          {showQuizlet && (
-            <>
-              <label className="block">
-                <span className="mb-2 block text-sm uppercase tracking-[0.18em] text-slate-400">
-                  Quizlet Paste (Tab-separated: French[TAB]English)
-                </span>
-                <textarea
-                  value={rawQuizlet}
-                  onChange={(e) => setRawQuizlet(e.target.value)}
-                  className="h-32 w-full rounded-3xl border border-teal-400/20 bg-slate-950/80 p-4 text-sm text-slate-100 placeholder:text-slate-500"
-                />
-              </label>
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleImport}
-                  className="rounded-full border border-teal-400/40 px-5 py-3 font-display text-lg uppercase tracking-[0.16em] text-teal-200"
-                >
-                  Import Vocabulary
-                </button>
-              </div>
-            </>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          {room.code && (
+            <RoomJoinQR roomCode={room.code} />
           )}
         </div>
+        <div className="mt-4">
+          {!room.cardsLoaded && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="rounded-full bg-gold px-6 py-3 font-display text-lg font-bold uppercase tracking-[0.14em] text-slate-950 hover:bg-gold/90 transition"
+            >
+              Import Vocabulary
+            </button>
+          )}
+          {room.cardsLoaded > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-green-500/20 px-4 py-2 font-display text-lg uppercase tracking-[0.14em] text-green-400">
+                {room.cardsLoaded} terms loaded
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="rounded-full border border-white/20 px-4 py-2 font-display text-sm uppercase tracking-[0.14em] text-slate-300 hover:text-white"
+              >
+                Change
+              </button>
+            </div>
+          )}
+        </div>
+
+        {showImportModal && (
+          <QuizletImporter
+            onImport={handleVocabImport}
+            onClose={() => setShowImportModal(false)}
+          />
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">

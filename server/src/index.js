@@ -26,20 +26,51 @@ import {
   stopLeague,
   startPenaltyShootout,
   submitPenaltyAnswer,
+  getRoomCount,
 } from "./roomStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const PORT = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || "development";
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
+const REDIS_URL = process.env.REDIS_URL;
+const ROOM_TTL_MINUTES = parseInt(process.env.ROOM_TTL_MINUTES || "120", 10);
+
 const app = express();
-app.use(cors());
+
+app.use(cors({ 
+  origin: CORS_ORIGIN === "*" ? "*" : CORS_ORIGIN.split(",").map(s => s.trim()),
+  credentials: true,
+}));
 app.use(express.json());
+
+let startTime = Date.now();
+
+app.get("/healthz", (_req, res) => {
+  const uptime = Math.floor((Date.now() - startTime) / 1000);
+  const memoryUsage = process.memoryUsage();
+  
+  res.json({ 
+    ok: true, 
+    status: "healthy",
+    uptime: `${Math.floor(uptime / 60)}m ${uptime % 60}s`,
+    rooms: getRoomCount(),
+    memory: {
+      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+    },
+    env: NODE_ENV,
+    version: "1.0.0",
+  });
+});
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = NODE_ENV === "production";
 if (isProduction) {
   const clientDist = join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(clientDist));
@@ -50,8 +81,34 @@ if (isProduction) {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" },
+  cors: { 
+    origin: CORS_ORIGIN === "*" ? "*" : CORS_ORIGIN.split(",").map(s => s.trim()),
+    credentials: true,
+  },
 });
+
+async function setupRedisAdapter() {
+  if (!REDIS_URL) return false;
+  
+  try {
+    const { createAdapter } = await import("@socket.io/redis-adapter");
+    const { createClient } = await import("redis");
+    
+    const pubClient = createClient({ url: REDIS_URL });
+    const subClient = pubClient.duplicate();
+    
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    
+    console.log(`Redis adapter connected: ${REDIS_URL.replace(/:[^:@]+@/, ":****@")}`);
+    return true;
+  } catch (err) {
+    console.warn(`Redis adapter failed: ${err.message}. Using in-memory mode.`);
+    return false;
+  }
+}
+
+setupRedisAdapter();
 
 function emitRoomState(room) {
   io.to(room.code).emit("room:state", serializeRoom(room));
@@ -271,7 +328,9 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log(`Server listening on http://localhost:${PORT} (${NODE_ENV})`);
+  if (ROOM_TTL_MINUTES > 0) {
+    console.log(`Room TTL: ${ROOM_TTL_MINUTES} minutes`);
+  }
 });

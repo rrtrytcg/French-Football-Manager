@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Le Manager Français — Teach French. Play Football.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  window.tailwind = { config: { theme: { extend: {
+    colors: { frenchBlue: '#0055A4', frenchRed: '#EF4135' },
+    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+    boxShadow: { 'soft': '0 20px 60px -20px rgba(15,23,42,0.15)' }
+  }}}}
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .ball-float { animation: float 4s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-8px) rotate(3deg)} }
+  .shine { position: relative; overflow: hidden; }
+  .shine::after { content:''; position:absolute; top:0; left:-100%; width:40%; height:100%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent); transform:skewX(-20deg); animation:shine 4s infinite; }
+  @keyframes shine { 0%{left:-100%} 60%,100%{left:200%} }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
+</style>
+</head>
+<body class="bg-[#FCFCFD] text-slate-900 antialiased selection:bg-frenchBlue selection:text-white">
+  <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+    <div class="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-frenchBlue via-white to-frenchRed"></div>
+  </div>
+
+  <!-- Nav -->
+  <header class="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-slate-900/5">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex h-[68px] items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="absolute -inset-2 bg-gradient-to-r from-frenchBlue/20 to-frenchRed/20 rounded-full blur-xl"></div>
+            <div class="relative w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shadow-sm">
+              <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0-8.5 4.7 15 15 0 0 1 3.5 2.3 15 15 0 0 0 5-1 15 15 0 0 1 5 1 15 15 0 0 1 3.5-2.3A10 10 0 0 0 12 2Z"/><path d="m3.5 6.7 3 2.3L5 12.5 2 11a10 10 0 0 1 1.5-4.3Z"/><path d="m20.5 6.7-3 2.3 1.5 3.5 3-1.5a10 10 0 0 0-1.5-4.3Z"/><path d="M12 16a15 15 0 0 1-5 1l-2 5a10 10 0 0 0 14 0l-2-5a15 15 0 0 1-5-1Z"/></svg>
+            </div>
+          <div>
+            <div class="font-semibold tracking-tight leading-none">Le Manager Français</div>
+            <div class="text-[11px] text-slate-500 -mt-0.5">Pour les professeurs</div>
+          </div>
+          <span class="hidden sm:inline-flex ml-2 px-2 py-1 rounded-full bg-slate-900 text-white text-[10px] font-medium tracking-wide">FOR TEACHERS</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="hidden sm:inline-flex text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100 transition">Sign in</button>
+          <button id="navCreate" type="button" class="inline-flex items-center gap-1.5 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm hover:bg-black transition active:scale-[0.98]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg>
+            Create Room
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="relative overflow-hidden">
+      <div class="pointer-events-none absolute inset-0 -z-10">
+        <div class="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[1200px] h-[800px] rounded-full bg-gradient-to-b from-slate-100 to-transparent blur-3xl"></div>
+        <div class="absolute -top-40 -right-40 w-96 h-96 bg-frenchBlue/10 rounded-full blur-3xl"></div>
+        <div class="absolute -top-20 -left-40 w-96 h-96 bg-frenchRed/10 rounded-full blur-3xl"></div>
+      </div>
+
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 sm:pt-20 pb-12">
+        <div class="max-w-3xl mx-auto text-center">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-medium text-slate-600 mb-6">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Live in 2,400+ classrooms
+          </div>
+
+          <div class="flex justify-center mb-6">
+            <div class="ball-float relative">
+              <div class="absolute inset-0 bg-gradient-to-b from-frenchBlue/20 to-frenchRed/20 blur-2xl rounded-full"></div>
+              <svg class="relative w-14 h-14 text-slate-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0-8.5 4.7 15 15 0 0 1 3.5 2.3 15 15 0 0 0 5-1 15 15 0 0 1 5 1 15 15 0 0 1 3.5-2.3A10 10 0 0 0 12 2Z"/><path d="m3.5 6.7 3 2.3L5 12.5 2 11a10 10 0 0 1 1.5-4.3Z"/><path d="m20.5 6.7-3 2.3 1.5 3.5 3-1.5a10 10 0 0 0-1.5-4.3Z"/><path d="M12 16a15 15 0 0 1-5 1l-2 5a10 10 0 0 0 14 0l-2-5a15 15 0 0 1-5-1Z"/></svg>
+            </div>
+          </div>
+
+          <h1 class="text-[clamp(38px,6vw,72px)] font-extrabold tracking-[-0.02em] leading-[0.9]">
+            <span class="text-frenchBlue">Teach French.</span>
+            <span class="text-slate-900"> Play Football.</span>
+            <span class="text-frenchRed"> Zero Setup.</span>
+          </h1>
+          <p class="mt-6 text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto">Real-time vocabulary game for classrooms</p>
+          <p class="text-slate-500 mt-1">Students join instantly. No apps. No accounts. Just pure Ligue 1 energy.</p>
+
+          <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button id="heroCreate" type="button" class="shine group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-900 text-white font-semibold px-7 h-[52px] rounded-2xl shadow-soft hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Create Room
+            </button>
+            <button id="tryDemo" type="button" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-800 font-semibold px-7 h-[52px] rounded-2xl hover:bg-slate-50 active:scale-[0.99] transition">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8-4 8-11 8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              Try Demo
+            </button>
+          </div>
+          <div class="mt-4 text-xs text-slate-500">Free for teachers • Works on Chromebooks, iPads, phones</div>
+        </div>
+
+        <!-- Dashboard Mock -->
+        <div id="dashboard" class="mt-16 sm:mt-24 relative">
+          <div class="absolute -inset-6 bg-gradient-to-r from-frenchBlue/10 via-transparent to-frenchRed/10 blur-3xl rounded-[3rem]"></div>
+          <div class="relative mx-auto max-w-[1100px] bg-slate-950 rounded-[32px] p-[8px] shadow-2xl ring-1 ring-slate-900/10">
+            <div class="bg-[#0B1220] rounded-[24px] overflow-hidden ring-1 ring-white/10">
+              <div class="flex items-center gap-2 px-4 h-12 bg-white/[0.02] border-b border-white/5">
+                <div class="flex gap-1.5">
+                  <div class="w-3 h-3 rounded-full bg-red-500/80"></div><div class="w-3 h-3 rounded-full bg-yellow-500/80"></div><div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+                </div>
+                <div class="ml-3 flex items-center gap-2 text-[12px] text-white/60">
+                  <div class="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/10">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>LIVE
+                  </div>
+                  <span class="truncate">lemanager.fr • Salle FR-2841 • Année 8</span>
+                </div>
+                <div class="ml-auto hidden sm:flex items-center gap-3 text-[11px] text-white/50">
+                  <span>24 élèves</span><span>•</span><span>3e manche</span>
+                </div>
+              </div>
+
+              <div class="grid lg:grid-cols-12 gap-px bg-white/5">
+                <!-- Left -->
+                <div class="lg:col-span-3 bg-[#0F172A] p-4 sm:p-5">
+                  <div class="text-[11px] uppercase tracking-wider text-white/40 font-semibold mb-3">Classement</div>
+                  <div class="space-y-2 text-sm">
+                    <div class="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2.5 border border-white/10"><div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-frenchBlue grid place-items-center text-[10px] text-white font-bold">1</span><span class="text-white/90">Emma L.</span></div><span class="text-emerald-400 font-medium">1,240</span></div>
+                    <div class="flex items-center justify-between bg-white/[0.03] rounded-xl px-3 py-2.5 border border-white/5"><div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 grid place-items-center text-[10px] text-white font-bold">2</span><span class="text-white/80">Noah</span></div><span class="text-white/70 font-medium">1,180</span></div>
+                    <div class="flex items-center justify-between bg-white/[0.03] rounded-xl px-3 py-2.5 border border-white/5"><div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 grid place-items-center text-[10px] text-white font-bold">3</span><span class="text-white/80">Sofia</span></div><span class="text-white/70 font-medium">1,105</span></div>
+                    <div class="flex items-center justify-between bg-white/[0.02] rounded-xl px-3 py-2.5 border border-white/5"><div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-800 grid place-items-center text-[10px] text-white/70 font-bold">4</span><span class="text-white/60">Liam</span></div><span class="text-white/50 font-medium">980</span></div>
+                    <div class="flex items-center justify-between bg-white/[0.02] rounded-xl px-3 py-2.5 border border-white/5"><div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-800 grid place-items-center text-[10px] text-white/70 font-bold">5</span><span class="text-white/60">Mia</span></div><span class="text-white/50 font-medium">945</span></div>
+                  </div>
+                  <div class="mt-4 text-[11px] text-white/40">Mise à jour en direct • Auto-save</div>
+                </div>
+                <!-- Center -->
+                <div class="lg:col-span-6 bg-[#101826] p-4 sm:p-6">
+                  <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-full bg-frenchBlue grid place-items-center text-white font-bold text-xs">PSG</div>
+                      <div class="text-white font-semibold">Paris SG</div>
+                    </div>
+                    <div class="text-2xl font-bold text-white tabular-nums" id="score">2 - 1</div>
+                    <div class="flex items-center gap-2">
+                      <div class="text-white font-semibold">Lyon</div>
+                      <div class="w-8 h-8 rounded-full bg-frenchRed grid place-items-center text-white font-bold text-xs">OL</div>
+                    </div>
+                  </div>
+                  <div class="relative h-[220px] sm:h-[260px] rounded-2xl overflow-hidden bg-[#0a5c36] border border-white/10">
+                    <div class="absolute inset-0 opacity-20" style="background-image:repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(0,0,0,.18) 40px,rgba(0,0,0,.18) 80px)"></div>
+                    <svg class="absolute inset-0 w-full h-full" viewBox="0 0 400 260" fill="none"><rect x="1" y="1" width="398" height="258" rx="16" stroke="white" stroke-opacity="0.25" stroke-width="2"/><line x1="200" y1="1" x2="200" y2="259" stroke="white" stroke-opacity="0.25" stroke-width="2"/><circle cx="200" cy="130" r="35" stroke="white" stroke-opacity="0.25" stroke-width="2"/><circle cx="200" cy="130" r="3" fill="white" fill-opacity="0.3"/></svg>
+                    <div id="psg-player" class="absolute left-[18%] top-1/2 -translate-y-1/2 transition-all duration-500"><div class="w-10 h-10 rounded-full bg-frenchBlue border-2 border-white shadow-lg grid place-items-center text-white font-bold text-[10px]">PSG</div></div>
+                    <div id="ol-player" class="absolute right-[18%] top-1/2 -translate-y-1/2 transition-all duration-500"><div class="w-10 h-10 rounded-full bg-frenchRed border-2 border-white shadow-lg grid place-items-center text-white font-bold text-[10px]">OL</div></div>
+                    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"><div class="w-7 h-7 rounded-full bg-white shadow-xl grid place-items-center ball-float text-[14px]">⚽</div></div>
+                  </div>
+                  <div class="mt-4 grid grid-cols-3 gap-2 text-[11px]">
+                    <div class="bg-white/5 rounded-lg p-2.5 text-center border border-white/10"><div class="text-white/50">Précision</div><div class="text-white font-semibold text-base" id="accuracy">87%</div></div>
+                    <div class="bg-white/5 rounded-lg p-2.5 text-center border border-white/10"><div class="text-white/50">Réponses</div><div class="text-white font-semibold text-base" id="answers">142</div></div>
+                    <div class="bg-white/5 rounded-lg p-2.5 text-center border border-white/10"><div class="text-white/50">Manche</div><div class="text-white font-semibold text-base">3/5</div></div>
+                  </div>
+                </div>
+                <!-- Right -->
+                <div class="lg:col-span-3 bg-[#0F172A] p-4 sm:p-5">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="text-[11px] uppercase tracking-wider text-white/40 font-semibold">Mot actuel</div>
+                    <div class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">+10 pts</div>
+                  </div>
+                  <div class="bg-white/5 rounded-2xl p-5 border border-white/10 text-center">
+                    <div class="text-white/60 text-xs mb-1">Traduisez</div>
+                    <div class="text-3xl font-extrabold text-white tracking-tight" id="vocab-fr">le ballon</div>
+                    <div class="mt-1 text-white/50 text-sm" id="vocab-en">the ball</div>
+                    <div class="mt-4 h-px bg-white/10"></div>
+                    <div class="mt-4 grid grid-cols-2 gap-2">
+                      <button type="button" class="py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-medium">Correct</button>
+                      <button type="button" class="py-2.5 rounded-xl bg-white/5 text-white/70 border border-white/10 text-sm font-medium">Pass</button>
+                    </div>
+                  </div>
+                  <div class="mt-4">
+                    <div class="text-[11px] uppercase tracking-wider text-white/40 font-semibold mb-2">Équipe en attaque</div>
+                    <div class="flex items-center gap-2 bg-white/5 rounded-xl p-3 border border-white/10">
+                      <div id="attack-badge" class="w-6 h-6 rounded-full bg-frenchBlue grid place-items-center text-[10px] text-white font-bold">PSG</div>
+                      <div id="attack-team" class="text-white/90 text-sm font-medium">Paris SG</div>
+                      <div class="ml-auto w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-2 relative z-10">
+      <div class="grid md:grid-cols-3 gap-4 lg:gap-6">
+        <div class="group relative bg-white rounded-[28px] border border-slate-200 p-7 shadow-sm hover:shadow-soft transition-all hover:-translate-y-1">
+          <div class="absolute top-0 left-7 right-7 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+          <div class="w-11 h-11 rounded-2xl bg-slate-900 text-white grid place-items-center shadow-sm mb-5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3 class="font-semibold text-lg">30-second start</h3>
+          <p class="mt-2 text-slate-600 text-[15px] leading-relaxed">Generate a room code. Project it. Students are in. No installs, no syncing.</p>
+          <div class="mt-4 flex items-center gap-1.5 text-xs font-medium text-frenchBlue"><span class="w-1 h-1 rounded-full bg-frenchBlue"></span> Instant QR + link</div>
+        </div>
+        <div class="group relative bg-white rounded-[28px] border border-slate-200 p-7 shadow-sm hover:shadow-soft transition-all hover:-translate-y-1">
+          <div class="w-11 h-11 rounded-2xl bg-slate-900 text-white grid place-items-center shadow-sm mb-5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/></svg>
+          </div>
+          <h3 class="font-semibold text-lg">No student accounts</h3>
+          <p class="mt-2 text-slate-600 text-[15px] leading-relaxed">Join via QR or lemanager.fr/join. GDPR-friendly, no PII collected.</p>
+          <div class="mt-4 flex items-center gap-1.5 text-xs font-medium text-frenchBlue"><span class="w-1 h-1 rounded-full bg-frenchBlue"></span> Works on any device</div>
+        </div>
+        <div class="group relative bg-white rounded-[28px] border border-slate-200 p-7 shadow-sm hover:shadow-soft transition-all hover:-translate-y-1">
+          <div class="w-11 h-11 rounded-2xl bg-slate-900 text-white grid place-items-center shadow-sm mb-5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 0 0 1 0-5H20"/><path d="m9 10 2 2 4-4"/></svg>
+          </div>
+          <h3 class="font-semibold text-lg">Curriculum ready</h3>
+          <p class="mt-2 text-slate-600 text-[15px] leading-relaxed">A1–B1 vocab packs aligned to French National Curriculum + Ligue 1 clubs.</p>
+          <div class="mt-4 flex items-center gap-1.5 text-xs font-medium text-frenchRed"><span class="w-1 h-1 rounded-full bg-frenchRed"></span> Export results to CSV</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow / QR -->
+    <section class="relative mt-24 sm:mt-32 border-y border-slate-200 bg-white">
+      <div class="absolute inset-0 -z-10"><div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-50 to-transparent"></div></div>
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+        <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          <div>
+            <div class="inline-flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-frenchBlue mb-4"><span class="w-8 h-px bg-frenchBlue/50"></span>Teacher Workflow</div>
+            <h2 class="text-[32px] sm:text-[44px] font-extrabold tracking-tight leading-[1.1] text-slate-900">From zero to <span class="text-frenchRed">« Allez ! »</span> in three taps</h2>
+            <p class="mt-4 text-slate-600 text-lg">Designed for real classrooms. No IT tickets. No student emails.</p>
+            <div class="mt-10 space-y-6">
+              <div class="flex gap-4 group">
+                <div class="flex-shrink-0 w-10 h-10 rounded-2xl bg-frenchBlue text-white grid place-items-center font-bold shadow-sm group-hover:scale-105 transition">1</div>
+                <div>
+                  <div class="font-semibold text-slate-900">Create a room</div>
+                  <div class="text-slate-600 mt-1">Choose Ligue 1 club, level (A1–B1), and vocab set. We generate FR-XXXX instantly.</div>
+                </div>
+              </div>
+              <div class="flex gap-4 group">
+                <div class="flex-shrink-0 w-10 h-10 rounded-2xl bg-white border-2 border-slate-900 text-slate-900 grid place-items-center font-bold shadow-sm group-hover:scale-105 transition">2</div>
+                <div>
+                  <div class="font-semibold text-slate-900">Students scan</div>
+                  <div class="text-slate-600 mt-1">QR or short link. They pick a player name. No accounts, no personal data.</div>
+                </div>
+              </div>
+              <div class="flex gap-4 group">
+                <div class="flex-shrink-0 w-10 h-10 rounded-2xl bg-frenchRed text-white grid place-items-center font-bold shadow-sm group-hover:scale-105 transition">3</div>
+                <div>
+                  <div class="font-semibold text-slate-900">Play & learn</div>
+                  <div class="text-slate-600 mt-1">Real-time matches. Correct answers = attacks. Live leaderboard keeps everyone engaged.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="relative">
+            <div class="mx-auto max-w-[320px]">
+              <div class="relative bg-slate-900 rounded-[3rem] p-3 shadow-2xl ring-1 ring-black/10">
+                <div class="bg-white rounded-[2.5rem] overflow-hidden">
+                  <div class="h-10 bg-slate-900 flex items-center justify-center"><div class="w-20 h-5 bg-black rounded-full"></div></div>
+                  <div class="p-6 text-center">
+                    <div class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 mb-4"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>ROOM ACTIVE</div>
+                    <h3 class="font-bold text-xl">Rejoindre la partie</h3>
+                    <p class="text-slate-500 text-sm mt-1">Scannez ou allez sur</p>
+                    <p class="font-mono text-frenchBlue font-semibold">lemanager.fr/join</p>
+                    <div class="mt-5 flex justify-center">
+                      <div class="p-3 bg-white rounded-2xl shadow-sm border border-slate-200">
+                        <div id="qr-code" class="w-[176px] h-[176px] grid gap-[1px] bg-slate-200 p-1 rounded-lg" style="grid-template-columns: repeat(21,1fr);"></div>
+                      </div>
+                    <div class="mt-5">
+                      <div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-mono text-lg tracking-widest shadow-sm">FR-2841</div>
+                      <div class="text-xs text-slate-500 mt-2">Code salle</div>
+                    </div>
+                    <div class="mt-6 grid grid-cols-3 gap-3 text-left">
+                      <div class="bg-slate-50 rounded-xl p-3 border border-slate-100"><div class="text-[11px] text-slate-500">Élèves</div><div class="text-xl font-bold" id="phone-students">24</div></div>
+                      <div class="bg-slate-50 rounded-xl p-3 border border-slate-100"><div class="text-[11px] text-slate-500">Club</div><div class="text-xl font-bold">PSG</div></div>
+                      <div class="bg-slate-50 rounded-xl p-3 border border-slate-100"><div class="text-[11px] text-slate-500">Niveau</div><div class="text-xl font-bold">A2</div></div>
+                    </div>
+                  </div>
+                  <div class="h-8"></div>
+                </div>
+              </div>
+              <div class="absolute -left-6 top-16 hidden sm:flex items-center gap-2 px-3 py-2 bg-white rounded-xl shadow-soft border border-slate-100 text-xs font-medium"><span class="w-2 h-2 rounded-full bg-frenchBlue"></span> No download</div>
+              <div class="absolute -right-8 bottom-20 hidden sm:flex items-center gap-2 px-3 py-2 bg-white rounded-xl shadow-soft border border-slate-100 text-xs font-medium"><span class="w-2 h-2 rounded-full bg-frenchRed"></span> Works offline</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="py-20">
+      <div class="mx-auto max-w-4xl px-4 text-center">
+        <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Ready for kick-off?</h3>
+        <p class="mt-3 text-slate-600">Create your first room free. Takes less time than taking attendance.</p>
+        <div class="mt-8 flex flex-col sm:flex-row justify-center gap-3">
+          <button onclick="openModal()" type="button" class="bg-slate-900 text-white px-6 h-12 rounded-xl font-semibold hover:bg-black active:scale-[0.98] transition">Create Room — Free</button>
+          <a href="#" class="px-6 h-12 grid place-items-center rounded-xl border border-slate-200 font-medium hover:bg-slate-50 transition">View curriculum packs</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-200 py-10">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
+      <div class="flex items-center gap-2"><div class="w-1.5 h-4 bg-gradient-to-b from-frenchBlue via-white to-frenchRed rounded-full"></div>© 2025 Le Manager Français — Made for teachers</div>
+      <div class="flex items-center gap-5"><a href="#" class="hover:text-slate-900">Privacy</a><a href="#" class="hover:text-slate-900">Contact</a><a href="#" class="hover:text-slate-900">Status</a></div>
+    </div>
+  </footer>
+
+  <!-- Modal -->
+  <div id="modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onclick="closeModal()"></div>
+    <div class="relative z-10 min-h-full grid place-items-center p-4">
+      <div class="w-full max-w-md bg-white rounded-[28px] shadow-2xl border border-slate-200 p-7" style="animation:fadeIn .3s ease">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="w-10 h-10 rounded-2xl bg-slate-900 text-white grid place-items-center mb-3">⚽</div>
+            <h3 class="text-xl font-bold">Create a room</h3>
+            <p class="text-slate-600 text-sm mt-1">Instant setup. No login required.</p>
+          </div>
+          <button onclick="closeModal()" type="button" class="p-2 hover:bg-slate-100 rounded-xl text-slate-500">✕</button>
+        </div>
+        <div class="mt-6 space-y-4">
+          <div>
+            <label class="text-xs font-medium text-slate-600">Class name</label>
+            <input id="className" class="mt-1 w-full h-11 px-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-frenchBlue/30 focus:border-frenchBlue" value="Année 8 - Groupe A">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-medium text-slate-600">Niveau</label>
+              <select class="mt-1 w-full h-11 px-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-frenchBlue/30"><option>A1 Débutant</option><option selected>A2</option><option>B1</option></select>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">Club</label>
+              <select class="mt-1 w-full h-11 px-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-frenchBlue/30"><option>Paris SG</option><option>Olympique Lyonnais</option><option>OM</option><option>LOSC</option></select>
+            </div>
+          </div>
+        </div>
+        <button id="generateRoom" type="button" class="mt-6 w-full h-12 rounded-xl bg-slate-900 text-white font-semibold hover:bg-black active:scale-[0.99] transition">Generate Room Code</button>
+        <div id="roomResult" class="hidden mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+          <div class="text-xs text-slate-500">Your room is ready</div>
+          <div class="text-3xl font-mono font-bold tracking-widest mt-1" id="roomCode">FR-0000</div>
+          <div class="text-xs mt-2">Share: <span class="font-medium text-frenchBlue">lemanager.fr/join</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  function renderQR(){
+    const qr=document.getElementById('qr-code');
+    if(!qr) return;
+    qr.innerHTML='';
+    const size=21;
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const d=document.createElement('div');
+        let dark=false;
+        const inTL=x<7&&y<7, inTR=x>=14&&y<7, inBL=x<7&&y>=14;
+        if(inTL||inTR||inBL){
+          const lx=inTR?x-14:x;
+          const ly=(inTL||inTR)?y:y-14;
+          if(lx===0||lx===6||ly===0||ly===6|| (lx>=2&&lx<=4&&ly>=2&&ly<=4)) dark=true;
+        } else {
+          dark=Math.random()>0.52;
+        }
+        d.style.backgroundColor=dark?'#0f172a':'#ffffff';
+        d.style.borderRadius='1px';
+        qr.appendChild(d);
+      }
+    }
+  }
+  renderQR();
+
+  const modal=document.getElementById('modal');
+  function openModal(){ modal.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+  function closeModal(){ modal.classList.add('hidden'); document.body.style.overflow=''; }
+  document.getElementById('heroCreate')?.addEventListener('click', openModal);
+  document.getElementById('navCreate')?.addEventListener('click', openModal);
+
+  document.getElementById('generateRoom')?.addEventListener('click', ()=>{
+    const code='FR-'+Math.floor(1000+Math.random()*9000);
+    document.getElementById('roomCode').textContent=code;
+    document.getElementById('roomResult').classList.remove('hidden');
+    const btn=document.getElementById('generateRoom');
+    btn.textContent='Room Created ✓';
+    setTimeout(()=>{ btn.textContent='Generate Room Code'; },2000);
+  });
+
+  const vocab=[ {fr:"le ballon",en:"the ball",team:"Paris SG",badge:"PSG",color:"bg-frenchBlue"}, {fr:"l'arbitre",en:"the referee",team:"Olympique Lyonnais",badge:"OL",color:"bg-frenchRed"}, {fr:"marquer un but",en:"to score a goal",team:"Paris SG",badge:"PSG",color:"bg-frenchBlue"}, {fr:"le coup franc",en:"free kick",team:"OM Marseille",badge:"OM",color:"bg-sky-600"}, {fr:"la mi-temps",en:"half-time",team:"Olympique Lyonnais",badge:"OL",color:"bg-frenchRed"}, {fr:"le gardien",en:"goalkeeper",team:"Paris SG",badge:"PSG",color:"bg-frenchBlue"} ];
+  let vi=0, scoreL=2, scoreR=1, ans=142, acc=87;
+  function tick(){
+    vi=(vi+1)%vocab.length;
+    const v=vocab[vi];
+    document.getElementById('vocab-fr').textContent=v.fr;
+    document.getElementById('vocab-en').textContent=v.en;
+    document.getElementById('attack-team').textContent=v.team;
+    const badge=document.getElementById('attack-badge');
+    badge.textContent=v.badge;
+    badge.className='w-6 h-6 rounded-full grid place-items-center text-[10px] text-white font-bold '+v.color;
+    if(Math.random()>0.5){ scoreL++; document.getElementById('psg-player').style.transform='translateX(28px)'; } else { scoreR++; document.getElementById('ol-player').style.transform='translateX(-28px)'; }
+    document.getElementById('score').textContent=`${scoreL} - ${scoreR}`;
+    ans+=Math.floor(3+Math.random()*5);
+    acc=Math.min(98, acc+ (Math.random()>0.3?1:0));
+    document.getElementById('answers').textContent=ans;
+    document.getElementById('accuracy').textContent=acc+'%';
+    document.getElementById('phone-students').textContent=24+Math.floor(Math.random()*3);
+    setTimeout(()=>{ document.getElementById('psg-player').style.transform=''; document.getElementById('ol-player').style.transform=''; },550);
+  }
+  setInterval(tick, 2800);
+
+  document.getElementById('tryDemo')?.addEventListener('click', ()=>{
+    document.getElementById('dashboard').scrollIntoView({behavior:'smooth', block:'center'});
+    const db=document.getElementById('dashboard');
+    db.classList.add('ring-4','ring-frenchBlue/20');
+    setTimeout(()=>db.classList.remove('ring-4','ring-frenchBlue/20'),1200);
+  });
+
+  window.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+</script>
+</body>
+</html>

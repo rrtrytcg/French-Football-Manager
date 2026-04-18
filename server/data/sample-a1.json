@@ -1,0 +1,17 @@
+[
+  {"fr": "bonjour", "en": "hello"},
+  {"fr": "au revoir", "en": "goodbye"},
+  {"fr": "merci", "en": "thank you"},
+  {"fr": "s'il vous plaît", "en": "please"},
+  {"fr": "oui", "en": "yes"},
+  {"fr": "non", "en": "no"},
+  {"fr": "chat", "en": "cat"},
+  {"fr": "chien", "en": "dog"},
+  {"fr": "maison", "en": "house"},
+  {"fr": "école", "en": "school"},
+  {"fr": "livre", "en": "book"},
+  {"fr": "eau", "en": "water"},
+  {"fr": "pain", "en": "bread"},
+  {"fr": "rouge", "en": "red"},
+  {"fr": "bleu", "en": "blue"}
+]

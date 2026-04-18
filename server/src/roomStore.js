@@ -21,6 +21,10 @@ import { buildQuestion, parseQuizletText } from "./quiz.js";
 
 const rooms = new Map();
 
+export function getRoomCount() {
+  return rooms.size;
+}
+
 function makeRoomCode() {
   let code = "";
   do {

@@ -1,23 +1,47 @@
 export function parseQuizletText(rawText) {
-  const rows = rawText
+  const lines = rawText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const cards = rows.flatMap((row, index) => {
-    const [term, definition, ...rest] = row.split("\t");
-    if (!term || !definition || rest.length > 0) {
-      return [];
+  const cards = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let term = "";
+    let definition = "";
+
+    // Try different separators in order of specificity
+    if (line.includes("\t")) {
+      [term, definition] = line.split("\t");
+    } else if (line.includes(" - ")) {
+      [term, definition] = line.split(" - ");
+    } else if (line.includes(" : ")) {
+      [term, definition] = line.split(" : ");
+    } else if (line.includes(";")) {
+      [term, definition] = line.split(";");
+    } else if (line.includes(",")) {
+      [term, definition] = line.split(",");
+    } else {
+      // Fall back to 2+ spaces
+      const parts = line.split(/\s{2,}/);
+      if (parts.length >= 2) {
+        term = parts[0];
+        definition = parts.slice(1).join(" ");
+      }
     }
 
-    return [
-      {
-        id: `card-${index + 1}`,
-        term: term.trim(),
-        definition: definition.trim(),
-      },
-    ];
-  });
+    term = (term || "").trim();
+    definition = (definition || "").trim();
+
+    if (term && definition) {
+      cards.push({
+        id: `card-${i + 1}`,
+        term,
+        definition,
+      });
+    }
+  }
 
   return cards;
 }
