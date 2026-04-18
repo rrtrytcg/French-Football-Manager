@@ -1,49 +1,56 @@
+import { z } from "zod";
+
+const VocabItem = z.object({ fr: z.string().min(1), en: z.string().min(1) });
+const VocabList = z.array(VocabItem).min(3).max(500);
+
 export function parseQuizletText(rawText) {
   const lines = rawText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const cards = [];
+  const items = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    let term = "";
-    let definition = "";
+    let fr = "";
+    let en = "";
 
-    // Try different separators in order of specificity
     if (line.includes("\t")) {
-      [term, definition] = line.split("\t");
+      [fr, en] = line.split("\t");
     } else if (line.includes(" - ")) {
-      [term, definition] = line.split(" - ");
+      [fr, en] = line.split(" - ");
     } else if (line.includes(" : ")) {
-      [term, definition] = line.split(" : ");
+      [fr, en] = line.split(" : ");
     } else if (line.includes(";")) {
-      [term, definition] = line.split(";");
+      [fr, en] = line.split(";");
     } else if (line.includes(",")) {
-      [term, definition] = line.split(",");
+      [fr, en] = line.split(",");
     } else {
-      // Fall back to 2+ spaces
       const parts = line.split(/\s{2,}/);
       if (parts.length >= 2) {
-        term = parts[0];
-        definition = parts.slice(1).join(" ");
+        fr = parts[0];
+        en = parts.slice(1).join(" ");
       }
     }
 
-    term = (term || "").trim();
-    definition = (definition || "").trim();
+    fr = (fr || "").trim();
+    en = (en || "").trim();
 
-    if (term && definition) {
-      cards.push({
-        id: `card-${i + 1}`,
-        term,
-        definition,
-      });
+    if (fr && en) {
+      items.push({ fr, en });
     }
   }
 
-  return cards;
+  return VocabList.parse(items);
+}
+
+export function buildCardsFromVocab(vocabItems) {
+  return vocabItems.map((item, i) => ({
+    id: `card-${i + 1}`,
+    term: item.fr,
+    definition: item.en,
+  }));
 }
 
 export function buildQuestion(cards, askedCardIds = new Set()) {

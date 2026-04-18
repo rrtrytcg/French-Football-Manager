@@ -27,7 +27,9 @@ import {
   startPenaltyShootout,
   submitPenaltyAnswer,
   getRoomCount,
+  setVocab,
 } from "./roomStore.js";
+import { parseQuizletText, buildCardsFromVocab } from "./quiz.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -130,6 +132,22 @@ io.on("connection", (socket) => {
     }
     emitRoomState(result.room);
     callback?.({ ok: true });
+  });
+
+  socket.on("teacher:setVocab", ({ code, rawText }, callback) => {
+    try {
+      const vocab = parseQuizletText(rawText);
+      const cards = buildCardsFromVocab(vocab);
+      const result = setVocab(code, cards);
+      if (result.error) {
+        callback?.({ ok: false, error: result.error });
+        return;
+      }
+      emitRoomState(result.room);
+      callback?.({ ok: true, count: vocab.length });
+    } catch (e) {
+      callback?.({ ok: false, error: "Invalid format. Use French[tab]English" });
+    }
   });
 
   socket.on("teacher:kick-student", ({ code, studentSocketId }, callback) => {

@@ -244,6 +244,26 @@ export function importQuizletSet(code, rawText) {
   return { room };
 }
 
+export function setVocab(code, cards) {
+  const room = getRoom(code);
+  if (!room) {
+    return { error: "Room not found." };
+  }
+
+  if (cards.length < 4) {
+    return { error: "At least 4 cards are required." };
+  }
+
+  room.cards = cards;
+  room.status = "ready";
+  for (const student of room.students.values()) {
+    student.askedCardIds.clear();
+    student.currentQuestion = null;
+  }
+
+  return { room };
+}
+
 export function addStudent(code, socketId, teamName) {
   const room = getRoom(code);
   if (!room) {
